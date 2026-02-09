@@ -1,0 +1,3871 @@
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+
+// ==================== CONSTANTS & CONFIG ====================
+const STORES = [
+  { id: "black-river", name: "Black River", label: "Black River (HQ)", isHQ: true, phone: "484 1477", address: "Royal Road, Black River" },
+  { id: "pointe-aux-canonniers", name: "Pointe aux Canonniers", label: "Pointe aux Canonniers", isHQ: false, phone: "", address: "Royal Road, Pointe aux Canonniers" },
+  { id: "trou-deau-douce", name: "Trou D'eau Douce", label: "Trou D'eau Douce", isHQ: false, phone: "480 3304", address: "Royal Road, Trou D'eau Douce" },
+];
+
+const ROLES = {
+  SUPER_ADMIN: { id: "super_admin", label: "Super Admin", color: "#E63946" },
+  STORE_MANAGER: { id: "store_manager", label: "Store Manager", color: "#1D3557" },
+  EMPLOYEE: { id: "employee", label: "Employee", color: "#457B9D" },
+  ACCOUNTANT: { id: "accountant", label: "Accountant", color: "#2A9D8F" },
+};
+
+const DEFAULT_USERS = [
+  { id: "u1", name: "Dad", pin: "1234", role: "super_admin", store: "all", avatar: "boss" },
+  { id: "u2", name: "Admin", pin: "5678", role: "store_manager", store: "all", avatar: "admin" },
+  { id: "u3", name: "Kevin", pin: "1111", role: "employee", store: "pointe-aux-canonniers", avatar: "employee" },
+];
+
+const VAT_RATE = 0.15;
+const CURRENCY = { code: "MUR", symbol: "Rs", name: "Mauritian Rupee" };
+const CURRENCIES = [
+  { code: "MUR", symbol: "Rs", name: "Mauritian Rupee", rate: 1 },
+  { code: "USD", symbol: "$", name: "US Dollar", rate: 0.022 },
+  { code: "EUR", symbol: "€", name: "Euro", rate: 0.020 },
+  { code: "GBP", symbol: "£", name: "British Pound", rate: 0.017 },
+];
+
+const SAMPLE_CATEGORIES = [
+  "Kayaks", "Boards", "Snorkeling Equipment", "Marine Supplies", "Inflatables", "Outdoor", "Spare Parts", "Accessories",
+];
+
+const SAMPLE_PRODUCTS = [
+  { id: "p1", name: "Ocean Kayak Explorer", sku: "KAY-001", category: "Kayaks", price: 18500, cost: 12000, stock: { "black-river": 5, "pointe-aux-canonniers": 3, "trou-deau-douce": 2 }, minStock: 2, unit: "piece" },
+  { id: "p2", name: "SUP Board Premium", sku: "BRD-001", category: "Boards", price: 22000, cost: 14500, stock: { "black-river": 4, "pointe-aux-canonniers": 2, "trou-deau-douce": 3 }, minStock: 2, unit: "piece" },
+  { id: "p3", name: "Full Face Snorkel Mask", sku: "SNK-001", category: "Snorkeling Equipment", price: 3200, cost: 1800, stock: { "black-river": 15, "pointe-aux-canonniers": 12, "trou-deau-douce": 10 }, minStock: 5, unit: "piece" },
+  { id: "p4", name: "Marine Anchor Kit", sku: "MAR-001", category: "Marine Supplies", price: 8500, cost: 5200, stock: { "black-river": 8, "pointe-aux-canonniers": 6, "trou-deau-douce": 4 }, minStock: 3, unit: "set" },
+  { id: "p5", name: "Life Jacket Adult", sku: "MAR-002", category: "Marine Supplies", price: 2800, cost: 1500, stock: { "black-river": 20, "pointe-aux-canonniers": 15, "trou-deau-douce": 12 }, minStock: 8, unit: "piece" },
+  { id: "p6", name: "Inflatable Flamingo Float", sku: "INF-001", category: "Inflatables", price: 3500, cost: 2200, stock: { "black-river": 10, "pointe-aux-canonniers": 8, "trou-deau-douce": 6 }, minStock: 4, unit: "piece" },
+  { id: "p7", name: "Beach Volleyball Set", sku: "OUT-001", category: "Outdoor", price: 4500, cost: 2800, stock: { "black-river": 10, "pointe-aux-canonniers": 8, "trou-deau-douce": 6 }, minStock: 3, unit: "set" },
+  { id: "p8", name: "Fishing Rod Combo", sku: "OUT-002", category: "Outdoor", price: 6800, cost: 4200, stock: { "black-river": 7, "pointe-aux-canonniers": 5, "trou-deau-douce": 4 }, minStock: 3, unit: "piece" },
+  { id: "p9", name: "Kayak Paddle Carbon", sku: "SPR-001", category: "Spare Parts", price: 4200, cost: 2600, stock: { "black-river": 12, "pointe-aux-canonniers": 8, "trou-deau-douce": 6 }, minStock: 4, unit: "piece" },
+  { id: "p10", name: "Waterproof Phone Pouch", sku: "ACC-001", category: "Accessories", price: 850, cost: 350, stock: { "black-river": 30, "pointe-aux-canonniers": 25, "trou-deau-douce": 20 }, minStock: 10, unit: "piece" },
+];
+
+const SAMPLE_INVOICES = [
+  { id: "INV-001", client: "Blue Bay Resort", items: [{ productId: "p1", qty: 2, price: 18500 }, { productId: "p5", qty: 5, price: 2800 }], date: "2026-01-28", dueDate: "2026-02-28", status: "paid", store: "black-river", currency: "MUR", lang: "en", vat: true },
+  { id: "INV-002", client: "Paradise Beach Hotel", items: [{ productId: "p3", qty: 10, price: 3200 }, { productId: "p10", qty: 20, price: 850 }], date: "2026-01-30", dueDate: "2026-03-01", status: "pending", store: "pointe-aux-canonniers", currency: "MUR", lang: "en", vat: true },
+  { id: "INV-003", client: "Aventure Nautique", items: [{ productId: "p2", qty: 1, price: 22000 }, { productId: "p9", qty: 2, price: 4200 }], date: "2026-02-01", dueDate: "2026-03-03", status: "draft", store: "trou-deau-douce", currency: "MUR", lang: "fr", vat: true },
+];
+
+const SAMPLE_EXPENSES = [
+  { id: "e1", description: "Store Rent - Black River", amount: 45000, category: "Rent", date: "2026-01-01", store: "black-river", recurring: true },
+  { id: "e2", description: "Electricity Bill", amount: 8500, category: "Utilities", date: "2026-01-15", store: "black-river", recurring: true },
+  { id: "e3", description: "Shipping - Kayak Import", amount: 125000, category: "Shipping", date: "2026-01-20", store: "black-river", recurring: false },
+  { id: "e4", description: "Store Rent - Pointe aux Canonniers", amount: 38000, category: "Rent", date: "2026-01-01", store: "pointe-aux-canonniers", recurring: true },
+  { id: "e5", description: "Marketing Materials", amount: 12000, category: "Marketing", date: "2026-01-25", store: "pointe-aux-canonniers", recurring: false },
+];
+
+const SAMPLE_TIME_ENTRIES = [
+  { id: "t1", userId: "u2", date: "2026-02-02", hoursWorked: 8, store: "black-river", note: "Regular shift" },
+  { id: "t2", userId: "u3", date: "2026-02-02", hoursWorked: 7.5, store: "pointe-aux-canonniers", note: "Regular shift" },
+];
+
+const SAMPLE_CUSTOMERS = [
+  { id: "c1", name: "Blue Bay Resort", email: "purchasing@bluebay.mu", phone: "+230 5123 4567", address: "Blue Bay, South Mauritius", type: "business", notes: "Large orders, net-30 terms", totalSpent: 125000 },
+  { id: "c2", name: "Paradise Beach Hotel", email: "ops@paradisebeach.mu", phone: "+230 5234 5678", address: "Grand Baie, North Mauritius", type: "business", notes: "Regular customer", totalSpent: 89000 },
+  { id: "c3", name: "Jean-Pierre Dubois", email: "jp.dubois@email.com", phone: "+230 5789 1234", address: "Quatre Bornes", type: "individual", notes: "", totalSpent: 15500 },
+  { id: "c4", name: "Aventure Nautique", email: "contact@aventure.mu", phone: "+230 5456 7890", address: "Flic en Flac", type: "business", notes: "Reseller - 10% discount", totalSpent: 210000 },
+  { id: "c5", name: "Marie Claire Hotel", email: "events@marieclaire.mu", phone: "+230 5321 9876", address: "Trou aux Biches", type: "business", notes: "Event equipment rentals", totalSpent: 67000 },
+];
+
+const SAMPLE_SUPPLIERS = [
+  { id: "s1", name: "Winner Kayak International", email: "orders@winnerkayak.com", phone: "+1 555 1234", address: "California, USA", category: "Kayaks", notes: "Official kayak supplier", paymentTerms: "Net 60" },
+  { id: "s2", name: "AquaGear Ltd", email: "sales@aquagear.com", phone: "+44 20 1234 5678", address: "London, UK", category: "Snorkeling", notes: "Snorkeling & marine supplies", paymentTerms: "Net 30" },
+  { id: "s3", name: "MU Imports Co", email: "info@muimports.mu", phone: "+230 5111 2222", address: "Port Louis, Mauritius", category: "General", notes: "Local distributor", paymentTerms: "Net 15" },
+];
+
+const SAMPLE_QUOTES = [
+  { id: "QUO-001", customer: "Blue Bay Resort", customerId: "c1", items: [{ productId: "p1", qty: 5, price: 18500 }, { productId: "p5", qty: 20, price: 2800 }], date: "2026-01-28", validUntil: "2026-02-28", status: "pending", store: "black-river", currency: "MUR", lang: "en", vat: true, notes: "Bulk order for new water sports center" },
+  { id: "QUO-002", customer: "Paradise Beach Hotel", customerId: "c2", items: [{ productId: "p3", qty: 30, price: 3200 }, { productId: "p10", qty: 50, price: 850 }], date: "2026-01-25", validUntil: "2026-02-25", status: "accepted", store: "pointe-aux-canonniers", currency: "MUR", lang: "en", vat: true, notes: "" },
+  { id: "QUO-003", customer: "Aventure Nautique", customerId: "c4", items: [{ productId: "p2", qty: 3, price: 19800 }], date: "2026-01-15", validUntil: "2026-01-30", status: "expired", store: "black-river", currency: "MUR", lang: "fr", vat: true, notes: "10% reseller discount applied" },
+];
+
+const SAMPLE_BILLS = [
+  { id: "BILL-001", supplier: "Winner Kayak International", supplierId: "s1", amount: 450000, date: "2026-01-10", dueDate: "2026-03-10", status: "pending", category: "Inventory", reference: "WK-INV-2026-001", notes: "10 kayaks shipment" },
+  { id: "BILL-002", supplier: "AquaGear Ltd", supplierId: "s2", amount: 125000, date: "2026-01-20", dueDate: "2026-02-20", status: "paid", paidDate: "2026-02-15", category: "Inventory", reference: "AG-5523", notes: "Q1 snorkeling stock" },
+  { id: "BILL-003", supplier: "MU Imports Co", supplierId: "s3", amount: 35000, date: "2026-01-25", dueDate: "2026-02-10", status: "overdue", category: "Shipping", reference: "MUI-2026-089", notes: "Import handling fees" },
+];
+
+const SAMPLE_BUDGETS = [
+  { id: "b1", name: "Monthly Rent", amount: 118000, spent: 118000, category: "Rent", period: "monthly", store: "all" },
+  { id: "b2", name: "Marketing Q1", amount: 50000, spent: 12000, category: "Marketing", period: "quarterly", store: "all" },
+  { id: "b3", name: "Utilities Budget", amount: 25000, spent: 13000, category: "Utilities", period: "monthly", store: "all" },
+  { id: "b4", name: "Inventory Restocking", amount: 500000, spent: 575000, category: "Inventory", period: "quarterly", store: "all" },
+];
+
+const SEAL_LOGO = "data:image/png;base64,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";
+
+// ==================== SUPABASE CONFIG ====================
+const SUPABASE_URL = "https://wlgkhcqtcnykpgomngon.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsZ2toY3F0Y255a3Bnb21uZ29uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NjUxNjMsImV4cCI6MjA4NjE0MTE2M30.suJqjCTMJ6pUu7IYse32j40KimVQMLaM4PlPnyX71Hs";
+
+// Simple Supabase client
+const supabase = {
+  async fetch(endpoint, options = {}) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1${endpoint}`, {
+      ...options,
+      headers: {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": options.method === "POST" ? "return=minimal" : "return=representation",
+        ...options.headers,
+      },
+    });
+    if (!res.ok) throw new Error(`Supabase error: ${res.status}`);
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  },
+  
+  async loadData() {
+    try {
+      const result = await this.fetch("/app_data?id=eq.main&select=data");
+      if (result && result.length > 0 && result[0].data && Object.keys(result[0].data).length > 0) {
+        return result[0].data;
+      }
+    } catch (e) {
+      console.error("Failed to load from Supabase:", e);
+    }
+    return null;
+  },
+  
+  async saveData(data) {
+    try {
+      await this.fetch("/app_data?id=eq.main", {
+        method: "PATCH",
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      return true;
+    } catch (e) {
+      console.error("Failed to save to Supabase:", e);
+      return false;
+    }
+  },
+  
+  // Real-time subscription using Supabase Realtime
+  subscribe(callback) {
+    const url = `${SUPABASE_URL}/realtime/v1/websocket?apikey=${SUPABASE_ANON_KEY}&vsn=1.0.0`;
+    let ws = null;
+    let heartbeatInterval = null;
+    
+    const connect = () => {
+      ws = new WebSocket(url);
+      
+      ws.onopen = () => {
+        console.log("Realtime connected");
+        // Join the channel
+        const joinMsg = {
+          topic: "realtime:public:app_data",
+          event: "phx_join",
+          payload: { config: { broadcast: { self: false } } },
+          ref: "1",
+        };
+        ws.send(JSON.stringify(joinMsg));
+        
+        // Heartbeat every 30s
+        heartbeatInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ topic: "phoenix", event: "heartbeat", payload: {}, ref: "hb" }));
+          }
+        }, 30000);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === "UPDATE" || msg.event === "INSERT") {
+            const newData = msg.payload?.record?.data;
+            if (newData) {
+              callback(newData);
+            }
+          }
+        } catch (e) {}
+      };
+      
+      ws.onclose = () => {
+        console.log("Realtime disconnected, reconnecting...");
+        clearInterval(heartbeatInterval);
+        setTimeout(connect, 3000);
+      };
+      
+      ws.onerror = (e) => {
+        console.error("Realtime error:", e);
+        ws.close();
+      };
+    };
+    
+    connect();
+    
+    return () => {
+      clearInterval(heartbeatInterval);
+      if (ws) ws.close();
+    };
+  }
+};
+
+function getDefaultState() {
+  return {
+    users: DEFAULT_USERS,
+    products: SAMPLE_PRODUCTS,
+    categories: SAMPLE_CATEGORIES,
+    invoices: SAMPLE_INVOICES,
+    expenses: SAMPLE_EXPENSES,
+    timeEntries: SAMPLE_TIME_ENTRIES,
+    transfers: [],
+    customers: SAMPLE_CUSTOMERS,
+    suppliers: SAMPLE_SUPPLIERS,
+    quotes: SAMPLE_QUOTES,
+    bills: SAMPLE_BILLS,
+    budgets: SAMPLE_BUDGETS,
+  };
+}
+
+// ==================== UTILITY FUNCTIONS ====================
+function genId(prefix = "") {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+function formatCurrency(amount, currCode = "MUR") {
+  const curr = CURRENCIES.find(c => c.code === currCode) || CURRENCIES[0];
+  return `${curr.symbol} ${Number(amount).toLocaleString("en-MU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function getTotalStock(product) {
+  return Object.values(product.stock || {}).reduce((a, b) => a + b, 0);
+}
+
+function getStockStatus(product) {
+  const total = getTotalStock(product);
+  if (total === 0) return { label: "Out of Stock", color: "#E63946", bg: "#FDE8EA" };
+  if (total <= (product.minStock || 0)) return { label: "Low Stock", color: "#E9C46A", bg: "#FEF9E7" };
+  return { label: "In Stock", color: "#2A9D8F", bg: "#E8F6F3" };
+}
+
+function canAccess(role, feature) {
+  const access = {
+    super_admin: ["all"],
+    store_manager: ["dashboard", "inventory", "invoices", "quotes", "expenses", "reports", "time", "transfers", "bills", "budgets", "customers"],
+    employee: ["dashboard", "inventory", "invoices", "quotes", "time", "transfers"],
+    accountant: ["dashboard", "reports", "expenses", "invoices", "bills", "budgets"],
+  };
+  const perms = access[role] || [];
+  return perms.includes("all") || perms.includes(feature);
+}
+
+// ==================== ICON COMPONENTS ====================
+const Icons = {
+  Dashboard: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+  Inventory: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+  Invoice: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
+  Expense: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  Report: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  Time: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  Transfer: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
+  Users: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  Customers: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  Supplier: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  // Avatar icons for users
+  AvatarBoss: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><path d="M12 4L10 2h4L12 4z" fill="currentColor"/></svg>,
+  AvatarAdmin: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><circle cx="12" cy="8" r="2" fill="currentColor"/></svg>,
+  AvatarEmployee: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/></svg>,
+  AvatarAccountant: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><rect x="10" y="6" width="4" height="3" rx="0.5" fill="currentColor"/></svg>,
+  User: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  Building: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg>,
+  Wallet: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>,
+  Receipt: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17V7"/></svg>,
+  Settings: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  Logout: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  Plus: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  Search: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  Filter: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
+  ChevDown: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>,
+  X: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Check: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  ArrowUp: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>,
+  ArrowDown: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>,
+  Store: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  Edit: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Trash: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  Eye: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  Print: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
+  Quote: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  Bill: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
+  Budget: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>,
+  Waves: () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>,
+  Offline: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>,
+};
+
+// ==================== USER AVATAR COMPONENT ====================
+function UserAvatar({ user, size = 44 }) {
+  const avatarIcons = {
+    boss: Icons.AvatarBoss,
+    admin: Icons.AvatarAdmin,
+    employee: Icons.AvatarEmployee,
+    accountant: Icons.AvatarAccountant,
+  };
+  const roleColor = ROLES[user.role?.toUpperCase()]?.color || theme.secondary;
+  const Icon = avatarIcons[user.avatar] || Icons.User;
+  
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: size * 0.3,
+      background: `linear-gradient(135deg, ${roleColor}20 0%, ${roleColor}35 100%)`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: roleColor, border: `2px solid ${roleColor}30`,
+      flexShrink: 0,
+    }}>
+      <div style={{ transform: `scale(${size / 44})` }}><Icon /></div>
+    </div>
+  );
+}
+
+function SealLogo({ size = 64, style = {}, variant = "default" }) {
+  const baseStyle = {
+    width: size,
+    height: "auto",
+    objectFit: "contain",
+    display: "block",
+    ...style,
+  };
+  if (variant === "dark") {
+    return <img src={SEAL_LOGO} alt="SEAL" style={{ ...baseStyle, filter: "brightness(1.15) drop-shadow(0 4px 20px rgba(233,196,106,0.2))" }} />;
+  }
+  return <img src={SEAL_LOGO} alt="SEAL" style={{ ...baseStyle }} />;
+}
+
+// ==================== STYLES ====================
+const theme = {
+  primary: "#1D3557",
+  primaryLight: "#264673",
+  accent: "#E9C46A",
+  accentDark: "#D4A843",
+  secondary: "#457B9D",
+  success: "#2A9D8F",
+  danger: "#E63946",
+  warning: "#F4A261",
+  bg: "#F7F8FC",
+  card: "#FFFFFF",
+  border: "#E8ECF4",
+  textPrimary: "#1A1D29",
+  textSecondary: "#6B7280",
+  textMuted: "#9CA3AF",
+  sidebarBg: "#0D1B2A",
+  sidebarHover: "#1B2D45",
+  sidebarActive: "#1D3557",
+};
+
+// ==================== LOGIN SCREEN ====================
+function LoginScreen({ onLogin, users }) {
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [pinDigits, setPinDigits] = useState(["", "", "", ""]);
+  const [error, setError] = useState("");
+  const [shake, setShake] = useState(false);
+  const pinRefs = [useRef(), useRef(), useRef(), useRef()];
+
+  const checkPin = useCallback((digits) => {
+    const fullPin = digits.join("");
+    if (fullPin.length === 4 && digits.every(d => d !== "")) {
+      const user = users.find(u => u.id === selectedUser && u.pin === fullPin);
+      if (user) {
+        onLogin(user);
+      } else {
+        setError("Incorrect PIN");
+        setShake(true);
+        setTimeout(() => {
+          setShake(false);
+          setPinDigits(["", "", "", ""]);
+          pinRefs[0].current?.focus();
+        }, 600);
+      }
+    }
+  }, [selectedUser, users, onLogin]);
+
+  const handlePinChange = (value, index) => {
+    const digit = (value || "").replace(/[^0-9]/g, "");
+    if (!digit) return;
+    const singleDigit = digit.slice(-1);
+    const newDigits = [...pinDigits];
+    newDigits[index] = singleDigit;
+    setPinDigits(newDigits);
+    setError("");
+
+    if (index < 3) {
+      setTimeout(() => pinRefs[index + 1].current?.focus(), 10);
+    }
+
+    if (newDigits.every(d => d !== "")) {
+      setTimeout(() => checkPin(newDigits), 100);
+    }
+  };
+
+  const handleKeyDown = (e, index) => {
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      const newDigits = [...pinDigits];
+      if (pinDigits[index]) {
+        newDigits[index] = "";
+        setPinDigits(newDigits);
+      } else if (index > 0) {
+        newDigits[index - 1] = "";
+        setPinDigits(newDigits);
+        pinRefs[index - 1].current?.focus();
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      pinRefs[index - 1].current?.focus();
+    } else if (e.key === "ArrowRight" && index < 3) {
+      pinRefs[index + 1].current?.focus();
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: `linear-gradient(135deg, #1D3557 0%, #264673 50%, #1D3557 100%)`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'Outfit', 'Segoe UI', sans-serif",
+      position: "relative", overflow: "hidden",
+    }}>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+      {/* Wave decoration */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "200px", opacity: 0.05 }}>
+        <svg viewBox="0 0 1440 200" style={{ width: "100%", height: "100%" }}>
+          <path fill="white" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,117.3C672,107,768,117,864,138.7C960,160,1056,192,1152,186.7C1248,181,1344,139,1392,117.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"/>
+        </svg>
+      </div>
+
+      <div style={{
+        width: "420px", maxWidth: "95vw",
+        animation: "fadeInUp 0.6s ease-out",
+      }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: "40px" }}>
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
+          }}>
+            <SealLogo size={220} variant="dark" style={{ filter: "drop-shadow(0 6px 24px rgba(233,196,106,0.25))" }} />
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)", letterSpacing: "3px", textTransform: "uppercase", fontWeight: 600 }}>Sports Equipment & Leisure</div>
+          </div>
+        </div>
+
+        {/* Card */}
+        <div style={{
+          background: "rgba(255,255,255,0.97)", borderRadius: "24px",
+          padding: "36px 40px", backdropFilter: "blur(20px)",
+          boxShadow: "0 25px 60px rgba(0,0,0,0.25)",
+          minWidth: "400px",
+        }}>
+          {!selectedUser ? (
+            <>
+              <div style={{ textAlign: "center", marginBottom: "32px" }}>
+                <h2 style={{ fontSize: "22px", fontWeight: 700, color: theme.textPrimary, marginBottom: "6px" }}>Welcome back</h2>
+                <p style={{ fontSize: "14px", color: theme.textSecondary }}>Select your profile to sign in</p>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: users.length > 3 ? "1fr 1fr" : "1fr", gap: "12px" }}>
+                {users.map(u => {
+                  const roleColor = ROLES[u.role.toUpperCase()]?.color || theme.secondary;
+                  return (
+                    <button key={u.id} onClick={() => { setSelectedUser(u.id); setPinDigits(["", "", "", ""]); setTimeout(() => pinRefs[0].current?.focus(), 100); }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "16px",
+                        padding: "16px 20px", borderRadius: "16px",
+                        border: `2px solid transparent`, 
+                        background: `linear-gradient(135deg, #FAFBFF 0%, #F5F7FA 100%)`,
+                        cursor: "pointer", transition: "all 0.25s ease",
+                        textAlign: "left",
+                        position: "relative",
+                        overflow: "hidden",
+                      }}
+                      onMouseEnter={e => { 
+                        e.currentTarget.style.borderColor = theme.accent; 
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 8px 24px rgba(233,196,106,0.2)";
+                      }}
+                      onMouseLeave={e => { 
+                        e.currentTarget.style.borderColor = "transparent"; 
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
+                    >
+                      <UserAvatar user={u} size={52} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "15px", fontWeight: 700, color: theme.textPrimary, marginBottom: "2px" }}>{u.name}</div>
+                        <div style={{ fontSize: "11px", color: roleColor, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "2px" }}>
+                          {ROLES[u.role.toUpperCase()]?.label || u.role}
+                        </div>
+                        <div style={{ fontSize: "11px", color: theme.textMuted }}>
+                          {u.store === "all" ? "All Stores" : STORES.find(s => s.id === u.store)?.name}
+                        </div>
+                      </div>
+                      <div style={{
+                        width: "32px", height: "32px", borderRadius: "50%",
+                        background: "white", display: "flex", alignItems: "center", justifyContent: "center",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                        color: theme.textMuted, flexShrink: 0,
+                      }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { setSelectedUser(null); setPinDigits(["", "", "", ""]); setError(""); }}
+                style={{ 
+                  background: "none", border: "none", cursor: "pointer", 
+                  display: "flex", alignItems: "center", gap: "6px", 
+                  color: theme.textSecondary, fontSize: "13px", fontWeight: 500,
+                  marginBottom: "24px", padding: "4px 0",
+                  transition: "color 0.2s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = theme.primary}
+                onMouseLeave={e => e.currentTarget.style.color = theme.textSecondary}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                Back to profiles
+              </button>
+              <div style={{ textAlign: "center", marginBottom: "32px" }}>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
+                  <UserAvatar user={users.find(u => u.id === selectedUser)} size={80} />
+                </div>
+                <h2 style={{ fontSize: "22px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>
+                  {users.find(u => u.id === selectedUser)?.name}
+                </h2>
+                <p style={{ fontSize: "13px", color: theme.textMuted, marginBottom: "8px" }}>
+                  {ROLES[users.find(u => u.id === selectedUser)?.role.toUpperCase()]?.label}
+                </p>
+                <p style={{ fontSize: "14px", color: theme.textSecondary }}>Enter your 4-digit PIN</p>
+              </div>
+              <div style={{
+                display: "flex", gap: "14px", justifyContent: "center", marginBottom: "24px",
+                animation: shake ? "shake 0.5s ease-in-out" : "none",
+              }}>
+                {[0, 1, 2, 3].map(i => (
+                  <input key={i} ref={pinRefs[i]}
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="off"
+                    maxLength={1}
+                    value={pinDigits[i]}
+                    onChange={e => handlePinChange(e.target.value, i)}
+                    onKeyDown={e => handleKeyDown(e, i)}
+                    onFocus={e => e.target.select()}
+                    onClick={e => e.target.select()}
+                    style={{
+                      width: "60px", height: "64px", textAlign: "center", fontSize: "28px",
+                      borderRadius: "14px", 
+                      border: `2.5px solid ${error ? theme.danger : pinDigits[i] ? theme.accent : theme.border}`,
+                      outline: "none", fontWeight: 700, color: theme.textPrimary,
+                      transition: "all 0.2s ease",
+                      background: pinDigits[i] ? `${theme.accent}08` : "#FAFBFF",
+                      WebkitTextSecurity: "disc",
+                      caretColor: "transparent",
+                      boxShadow: pinDigits[i] ? `0 4px 12px ${theme.accent}20` : "none",
+                    }}
+                  />
+                ))}
+              </div>
+              {error && (
+                <div style={{ 
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  color: theme.danger, fontSize: "14px", fontWeight: 500,
+                  background: `${theme.danger}10`, padding: "10px 16px", borderRadius: "10px",
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                  {error}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <p style={{ textAlign: "center", fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "20px" }}>
+          SEAL Business Manager · seal.mu
+        </p>
+      </div>
+
+      <style>{`
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+      `}</style>
+    </div>
+  );
+}
+
+// ==================== SIDEBAR ====================
+function Sidebar({ currentPage, setCurrentPage, user, onLogout, collapsed, setCollapsed }) {
+  const navItems = [
+    { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
+    { id: "customers", label: "Customers", icon: Icons.Customers },
+    { id: "inventory", label: "Inventory", icon: Icons.Inventory },
+    { id: "invoices", label: "Invoices", icon: Icons.Invoice },
+    { id: "quotes", label: "Quotes", icon: Icons.Quote },
+    { id: "bills", label: "Bills", icon: Icons.Bill },
+    { id: "expenses", label: "Expenses", icon: Icons.Expense },
+    { id: "transfers", label: "Transfers", icon: Icons.Transfer },
+    { id: "time", label: "Time Tracking", icon: Icons.Time },
+    { id: "reports", label: "Reports", icon: Icons.Report },
+    { id: "budgets", label: "Budgets", icon: Icons.Budget },
+    ...(canAccess(user.role, "all") ? [{ id: "users", label: "Users", icon: Icons.Users }, { id: "settings", label: "Settings", icon: Icons.Settings }] : []),
+  ].filter(item => canAccess(user.role, item.id));
+
+  return (
+    <div style={{
+      width: collapsed ? "68px" : "240px",
+      minHeight: "100vh",
+      background: theme.sidebarBg,
+      display: "flex", flexDirection: "column",
+      transition: "width 0.3s cubic-bezier(0.4,0,0.2,1)",
+      position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100,
+      overflow: "hidden",
+    }}>
+      {/* Logo */}
+      <div style={{
+        padding: collapsed ? "20px 12px" : "20px 20px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        display: "flex", alignItems: "center", gap: "10px",
+        cursor: "pointer", minHeight: "68px",
+      }} onClick={() => setCollapsed(!collapsed)}>
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <SealLogo size={collapsed ? 40 : 100} variant="dark" />
+        </div>
+        {!collapsed && (
+          <div style={{ overflow: "hidden", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.3)", letterSpacing: "2px", textTransform: "uppercase" }}>Business Manager</div>
+          </div>
+        )}
+      </div>
+
+      {/* Nav */}
+      <div style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
+        {navItems.map(item => {
+          const active = currentPage === item.id;
+          const Icon = item.icon;
+          return (
+            <button key={item.id} onClick={() => setCurrentPage(item.id)}
+              title={collapsed ? item.label : undefined}
+              style={{
+                display: "flex", alignItems: "center", gap: "12px",
+                width: "100%", padding: collapsed ? "11px 0" : "11px 14px",
+                justifyContent: collapsed ? "center" : "flex-start",
+                borderRadius: "10px", border: "none", cursor: "pointer",
+                background: active ? theme.sidebarActive : "transparent",
+                color: active ? "white" : "rgba(255,255,255,0.5)",
+                fontSize: "13.5px", fontWeight: active ? 600 : 400,
+                marginBottom: "2px",
+                transition: "all 0.15s",
+                fontFamily: "inherit",
+              }}
+              onMouseEnter={e => { if (!active) { e.currentTarget.style.background = theme.sidebarHover; e.currentTarget.style.color = "rgba(255,255,255,0.85)"; } }}
+              onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; } }}
+            >
+              <span style={{ flexShrink: 0, display: "flex" }}><Icon /></span>
+              {!collapsed && <span style={{ overflow: "hidden", whiteSpace: "nowrap" }}>{item.label}</span>}
+              {active && !collapsed && <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: theme.accent, marginLeft: "auto", flexShrink: 0 }} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* User */}
+      <div style={{ padding: collapsed ? "16px 8px" : "16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        {!collapsed && (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+            <UserAvatar user={user} size={36} />
+            <div style={{ overflow: "hidden" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "white", whiteSpace: "nowrap" }}>{user.name}</div>
+              <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>{ROLES[user.role.toUpperCase()]?.label}</div>
+            </div>
+          </div>
+        )}
+        <button onClick={onLogout}
+          style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            width: "100%", padding: "10px 14px", justifyContent: collapsed ? "center" : "flex-start",
+            borderRadius: "10px", border: "none", cursor: "pointer",
+            background: "rgba(230,57,70,0.1)", color: "#E63946",
+            fontSize: "13px", fontWeight: 500, fontFamily: "inherit",
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(230,57,70,0.2)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(230,57,70,0.1)"}
+        >
+          <Icons.Logout />
+          {!collapsed && "Sign Out"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ==================== STAT CARD ====================
+function StatCard({ title, value, subtitle, icon: Icon, color, trend, onClick }) {
+  return (
+    <div style={{
+      background: "white", borderRadius: "14px", padding: "22px",
+      border: `1px solid ${theme.border}`,
+      transition: "box-shadow 0.2s, transform 0.2s",
+      cursor: onClick ? "pointer" : "default",
+    }}
+    onClick={onClick}
+    onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.06)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+    onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+        <div style={{ fontSize: "13px", color: theme.textSecondary, fontWeight: 500 }}>{title}</div>
+        <div style={{
+          width: "38px", height: "38px", borderRadius: "10px",
+          background: `${color}12`, display: "flex", alignItems: "center", justifyContent: "center", color: color,
+        }}>
+          {Icon && <Icon />}
+        </div>
+      </div>
+      <div style={{ fontSize: "26px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px", fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
+      {(subtitle || trend) && (
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {trend && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: "2px",
+              fontSize: "12px", fontWeight: 600,
+              color: trend > 0 ? theme.success : theme.danger,
+            }}>
+              {trend > 0 ? <Icons.ArrowUp /> : <Icons.ArrowDown />} {Math.abs(trend)}%
+            </span>
+          )}
+          {subtitle && <span style={{ fontSize: "12px", color: theme.textMuted }}>{subtitle}</span>}
+        </div>
+      )}
+      {onClick && <div style={{ fontSize: "10px", color: theme.textMuted, marginTop: "8px", textAlign: "right" }}>Click to view →</div>}
+    </div>
+  );
+}
+
+// ==================== MODAL ====================
+function Modal({ open, onClose, title, children, width = "560px" }) {
+  if (!open) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
+      animation: "fadeIn 0.2s ease",
+    }} onClick={onClose}>
+      <div style={{
+        background: "white", borderRadius: "18px", width, maxWidth: "95vw", maxHeight: "90vh",
+        overflow: "hidden", display: "flex", flexDirection: "column",
+        boxShadow: "0 25px 60px rgba(0,0,0,0.2)",
+        animation: "slideUp 0.3s ease",
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "20px 24px", borderBottom: `1px solid ${theme.border}`,
+        }}>
+          <h3 style={{ fontSize: "17px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>{title}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted, padding: "4px", display: "flex" }}>
+            <Icons.X />
+          </button>
+        </div>
+        <div style={{ padding: "24px", overflowY: "auto", flex: 1 }}>
+          {children}
+        </div>
+      </div>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
+    </div>
+  );
+}
+
+// ==================== FORM COMPONENTS ====================
+function FormField({ label, children, required }) {
+  return (
+    <div style={{ marginBottom: "16px" }}>
+      <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: theme.textPrimary, marginBottom: "6px" }}>
+        {label} {required && <span style={{ color: theme.danger }}>*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const inputStyle = {
+  width: "100%", padding: "10px 14px", borderRadius: "10px",
+  border: `1.5px solid ${theme.border}`, fontSize: "14px",
+  outline: "none", fontFamily: "inherit", color: theme.textPrimary,
+  background: "white", boxSizing: "border-box",
+  transition: "border-color 0.2s",
+};
+
+const selectStyle = { ...inputStyle, appearance: "none", cursor: "pointer" };
+
+const btnPrimary = {
+  padding: "10px 22px", borderRadius: "10px", border: "none",
+  background: theme.primary, color: "white", fontSize: "14px",
+  fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+  display: "inline-flex", alignItems: "center", gap: "8px",
+  transition: "background 0.2s",
+};
+
+const btnSecondary = {
+  ...btnPrimary, background: "transparent", color: theme.textSecondary,
+  border: `1.5px solid ${theme.border}`,
+};
+
+const btnAccent = { ...btnPrimary, background: theme.accent, color: theme.primary };
+const btnDanger = { ...btnPrimary, background: theme.danger };
+const btnSuccess = { ...btnPrimary, background: theme.success };
+
+// ==================== DASHBOARD PAGE ====================
+function DashboardPage({ data, user, setCurrentPage, setData }) {
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [viewProduct, setViewProduct] = useState(null);
+  const storeFilter = user.store === "all" ? null : user.store;
+
+  const totalRevenue = data.invoices
+    .filter(inv => inv.status === "paid" && (!storeFilter || inv.store === storeFilter))
+    .reduce((sum, inv) => sum + inv.items.reduce((s, it) => s + it.qty * it.price, 0), 0);
+
+  const pendingInvoices = data.invoices.filter(inv => inv.status === "pending" && (!storeFilter || inv.store === storeFilter));
+  const pendingTotal = pendingInvoices.reduce((sum, inv) => sum + inv.items.reduce((s, it) => s + it.qty * it.price, 0), 0);
+
+  const totalExpenses = data.expenses
+    .filter(exp => !storeFilter || exp.store === storeFilter)
+    .reduce((sum, exp) => sum + exp.amount, 0);
+
+  const totalProducts = data.products.length;
+  const lowStockProducts = data.products.filter(p => {
+    const stock = storeFilter ? (p.stock[storeFilter] || 0) : getTotalStock(p);
+    return stock > 0 && stock <= (p.minStock || 0);
+  });
+  const outOfStock = data.products.filter(p => {
+    const stock = storeFilter ? (p.stock[storeFilter] || 0) : getTotalStock(p);
+    return stock === 0;
+  });
+
+  const recentInvoices = [...data.invoices]
+    .filter(inv => !storeFilter || inv.store === storeFilter)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
+
+  return (
+    <div>
+      <div style={{ marginBottom: "28px" }}>
+        <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>
+          Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {user.name} 👋
+        </h1>
+        <p style={{ fontSize: "14px", color: theme.textSecondary }}>
+          Here's what's happening at {storeFilter ? STORES.find(s => s.id === storeFilter)?.name : "SEAL"} today.
+        </p>
+      </div>
+
+      {/* Stats Grid - All Clickable */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "28px" }}>
+        <StatCard title="Total Revenue" value={formatCurrency(totalRevenue)} subtitle="All paid invoices" icon={Icons.Expense} color={theme.success} trend={12} onClick={() => setCurrentPage("invoices")} />
+        <StatCard title="Pending" value={formatCurrency(pendingTotal)} subtitle={`${pendingInvoices.length} invoices`} icon={Icons.Invoice} color={theme.warning} onClick={() => setCurrentPage("invoices")} />
+        <StatCard title="Expenses" value={formatCurrency(totalExpenses)} subtitle="This period" icon={Icons.Bill} color={theme.danger} onClick={() => setCurrentPage("expenses")} />
+        <StatCard title="Products" value={totalProducts} subtitle={`${lowStockProducts.length} low · ${outOfStock.length} out`} icon={Icons.Inventory} color={theme.secondary} onClick={() => setCurrentPage("inventory")} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+        {/* Recent Invoices - Clickable Rows */}
+        <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+          <div style={{ padding: "18px 22px", borderBottom: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>Recent Invoices</h3>
+            <button onClick={() => setCurrentPage("invoices")} style={{ fontSize: "12px", color: theme.primary, fontWeight: 600, background: "none", border: "none", cursor: "pointer" }}>
+              View all →
+            </button>
+          </div>
+          <div style={{ padding: "8px 0" }}>
+            {recentInvoices.length === 0 ? (
+              <p style={{ padding: "20px", textAlign: "center", color: theme.textMuted, fontSize: "13px" }}>No invoices yet</p>
+            ) : recentInvoices.map(inv => (
+              <div key={inv.id} 
+                onClick={() => setViewInvoice(inv)}
+                style={{ 
+                  display: "flex", alignItems: "center", justifyContent: "space-between", 
+                  padding: "12px 22px", borderBottom: `1px solid ${theme.border}`,
+                  cursor: "pointer", transition: "background 0.15s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "#FAFBFF"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary }}>{inv.client}</div>
+                  <div style={{ fontSize: "12px", color: theme.textMuted }}>{inv.id} · {formatDate(inv.date)}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {formatCurrency(inv.items.reduce((s, it) => s + it.qty * it.price, 0))}
+                  </div>
+                  <span style={{
+                    fontSize: "11px", fontWeight: 600, padding: "2px 8px", borderRadius: "20px",
+                    background: inv.status === "paid" ? "#E8F6F3" : inv.status === "pending" ? "#FEF9E7" : "#F0F0F5",
+                    color: inv.status === "paid" ? theme.success : inv.status === "pending" ? "#D4A843" : theme.textMuted,
+                  }}>
+                    {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Low Stock Alerts - Clickable Products */}
+        <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+          <div style={{ padding: "18px 22px", borderBottom: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>Stock Alerts</h3>
+            <button onClick={() => setCurrentPage("inventory")} style={{ fontSize: "12px", color: theme.primary, fontWeight: 600, background: "none", border: "none", cursor: "pointer" }}>
+              Manage →
+            </button>
+          </div>
+          <div style={{ padding: "8px 0", maxHeight: "300px", overflowY: "auto" }}>
+            {[...outOfStock, ...lowStockProducts].length === 0 ? (
+              <p style={{ padding: "20px", textAlign: "center", color: theme.textMuted, fontSize: "13px" }}>All stock levels healthy ✓</p>
+            ) : [...outOfStock, ...lowStockProducts].map(p => {
+              const status = getStockStatus(p);
+              const stock = storeFilter ? (p.stock[storeFilter] || 0) : getTotalStock(p);
+              return (
+                <div key={p.id} 
+                  onClick={() => setViewProduct(p)}
+                  style={{ 
+                    display: "flex", alignItems: "center", justifyContent: "space-between", 
+                    padding: "12px 22px", borderBottom: `1px solid ${theme.border}`,
+                    cursor: "pointer", transition: "background 0.15s",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#FAFBFF"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  <div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary }}>{p.name}</div>
+                    <div style={{ fontSize: "12px", color: theme.textMuted }}>{p.sku} · Min: {p.minStock}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: status.color, fontFamily: "'JetBrains Mono', monospace" }}>{stock}</div>
+                    <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 8px", borderRadius: "20px", background: status.bg, color: status.color }}>
+                      {status.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Store Overview - Clickable Cards */}
+      {user.store === "all" && (
+        <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+          {STORES.map(store => {
+            const storeProducts = data.products.filter(p => (p.stock[store.id] || 0) > 0).length;
+            const storeInvoices = data.invoices.filter(i => i.store === store.id).length;
+            const storeRevenue = data.invoices.filter(i => i.store === store.id && i.status === "paid")
+              .reduce((sum, inv) => sum + inv.items.reduce((s, it) => s + it.qty * it.price, 0), 0);
+            return (
+              <div key={store.id} 
+                onClick={() => setCurrentPage("reports")}
+                style={{ 
+                  background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, 
+                  padding: "20px", cursor: "pointer", transition: "all 0.2s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.06)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <h4 style={{ fontSize: "15px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>{store.name}</h4>
+                  {store.isHQ && <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "10px", background: `${theme.accent}20`, color: theme.accent }}>HQ</span>}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                  <div>
+                    <div style={{ fontSize: "18px", fontWeight: 700, color: theme.primary }}>{storeProducts}</div>
+                    <div style={{ fontSize: "11px", color: theme.textMuted }}>Products</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "18px", fontWeight: 700, color: theme.secondary }}>{storeInvoices}</div>
+                    <div style={{ fontSize: "11px", color: theme.textMuted }}>Invoices</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: theme.success }}>{formatCurrency(storeRevenue).replace("Rs ", "")}</div>
+                    <div style={{ fontSize: "11px", color: theme.textMuted }}>Revenue</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: "10px", color: theme.textMuted, marginTop: "8px", textAlign: "right" }}>Click for details →</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Quick Invoice View Modal */}
+      <Modal open={!!viewInvoice} onClose={() => setViewInvoice(null)} title={viewInvoice ? `Invoice ${viewInvoice.id}` : ""} width="500px">
+        {viewInvoice && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+              <div style={{ background: "#F8F9FD", borderRadius: "10px", padding: "14px" }}>
+                <div style={{ fontSize: "11px", color: theme.textMuted }}>Customer</div>
+                <div style={{ fontSize: "15px", fontWeight: 600, color: theme.textPrimary }}>{viewInvoice.client}</div>
+              </div>
+              <div style={{ background: "#F8F9FD", borderRadius: "10px", padding: "14px" }}>
+                <div style={{ fontSize: "11px", color: theme.textMuted }}>Status</div>
+                <span style={{
+                  fontSize: "12px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px",
+                  background: viewInvoice.status === "paid" ? "#E8F6F3" : viewInvoice.status === "pending" ? "#FEF9E7" : "#FDE8EA",
+                  color: viewInvoice.status === "paid" ? theme.success : viewInvoice.status === "pending" ? "#D4A843" : theme.danger,
+                }}>
+                  {viewInvoice.status.charAt(0).toUpperCase() + viewInvoice.status.slice(1)}
+                </span>
+              </div>
+            </div>
+            <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: "16px" }}>
+              {viewInvoice.items.map((item, i) => {
+                const product = data.products.find(p => p.id === item.productId);
+                return (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${theme.border}` }}>
+                    <div>
+                      <div style={{ fontSize: "14px", fontWeight: 500 }}>{product?.name || "Item"}</div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted }}>{item.qty} × {formatCurrency(item.price)}</div>
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>
+                      {formatCurrency(item.qty * item.price)}
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "12px", marginTop: "8px" }}>
+                <span style={{ fontWeight: 700 }}>Total</span>
+                <span style={{ fontSize: "18px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {formatCurrency(viewInvoice.items.reduce((s, it) => s + it.qty * it.price, 0) * (viewInvoice.vat ? 1.15 : 1))}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+              <button onClick={() => { setViewInvoice(null); setCurrentPage("invoices"); }} style={{ ...btnAccent, flex: 1 }}>
+                View Full Details
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Quick Product View Modal */}
+      <Modal open={!!viewProduct} onClose={() => setViewProduct(null)} title={viewProduct?.name || ""} width="500px">
+        {viewProduct && (
+          <div>
+            <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
+              <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: `${theme.secondary}12`, color: theme.secondary, fontWeight: 500 }}>{viewProduct.category}</span>
+              <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: "#F0F0F5", color: theme.textMuted, fontWeight: 500, fontFamily: "'JetBrains Mono', monospace" }}>{viewProduct.sku}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+              <div style={{ background: "#F8F9FD", borderRadius: "10px", padding: "14px" }}>
+                <div style={{ fontSize: "11px", color: theme.textMuted }}>Price</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(viewProduct.price)}</div>
+              </div>
+              <div style={{ background: "#F8F9FD", borderRadius: "10px", padding: "14px" }}>
+                <div style={{ fontSize: "11px", color: theme.textMuted }}>Cost</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: theme.textSecondary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(viewProduct.cost)}</div>
+              </div>
+            </div>
+            <h4 style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Stock by Store</h4>
+            {STORES.map(store => {
+              const stock = viewProduct.stock[store.id] || 0;
+              const status = stock === 0 ? { color: theme.danger, label: "Out" } : stock <= viewProduct.minStock ? { color: theme.warning, label: "Low" } : { color: theme.success, label: "OK" };
+              return (
+                <div key={store.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${theme.border}` }}>
+                  <span style={{ fontSize: "14px", color: theme.textPrimary }}>{store.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: status.color, fontFamily: "'JetBrains Mono', monospace" }}>{stock}</span>
+                    <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 6px", borderRadius: "10px", background: `${status.color}15`, color: status.color }}>{status.label}</span>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+              <button onClick={() => { setViewProduct(null); setCurrentPage("inventory"); }} style={{ ...btnAccent, flex: 1 }}>
+                Manage Inventory
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== INVENTORY PAGE ====================
+function InventoryPage({ data, setData, user }) {
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("all");
+  const [storeView, setStoreView] = useState(user.store === "all" ? "all" : user.store);
+  const [showModal, setShowModal] = useState(false);
+  const [editProduct, setEditProduct] = useState(null);
+  const [form, setForm] = useState({ name: "", sku: "", category: "", price: "", cost: "", minStock: "", unit: "piece", stock: {} });
+
+  const filtered = data.products.filter(p => {
+    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
+    const matchCat = catFilter === "all" || p.category === catFilter;
+    return matchSearch && matchCat;
+  });
+
+  const openAdd = () => {
+    setEditProduct(null);
+    const stockInit = {};
+    STORES.forEach(s => stockInit[s.id] = 0);
+    setForm({ name: "", sku: `SEAL-${Date.now().toString(36).toUpperCase()}`, category: data.categories[0] || "", price: "", cost: "", minStock: 2, unit: "piece", stock: stockInit });
+    setShowModal(true);
+  };
+
+  const openEdit = (p) => {
+    setEditProduct(p);
+    setForm({ name: p.name, sku: p.sku, category: p.category, price: p.price, cost: p.cost, minStock: p.minStock, unit: p.unit, stock: { ...p.stock } });
+    setShowModal(true);
+  };
+
+  const saveProduct = () => {
+    if (!form.name || !form.sku || !form.price) return;
+    if (editProduct) {
+      setData(prev => ({
+        ...prev,
+        products: prev.products.map(p => p.id === editProduct.id ? { ...p, ...form, price: Number(form.price), cost: Number(form.cost), minStock: Number(form.minStock) } : p),
+      }));
+    } else {
+      setData(prev => ({
+        ...prev,
+        products: [...prev.products, { id: genId("p"), ...form, price: Number(form.price), cost: Number(form.cost), minStock: Number(form.minStock) }],
+      }));
+    }
+    setShowModal(false);
+  };
+
+  const deleteProduct = (id) => {
+    setData(prev => ({ ...prev, products: prev.products.filter(p => p.id !== id) }));
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Inventory</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>{data.products.length} products across {STORES.length} stores</p>
+        </div>
+        <button onClick={openAdd} style={btnAccent}><Icons.Plus /> Add Product</button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
+          <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: theme.textMuted }}><Icons.Search /></span>
+          <input placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)}
+            style={{ ...inputStyle, paddingLeft: "38px" }}
+            onFocus={e => e.target.style.borderColor = theme.accent}
+            onBlur={e => e.target.style.borderColor = theme.border}
+          />
+        </div>
+        <select value={catFilter} onChange={e => setCatFilter(e.target.value)} style={{ ...selectStyle, width: "180px" }}>
+          <option value="all">All Categories</option>
+          {data.categories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {user.store === "all" && (
+          <select value={storeView} onChange={e => setStoreView(e.target.value)} style={{ ...selectStyle, width: "180px" }}>
+            <option value="all">All Stores</option>
+            {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* Products Table */}
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }}>
+            <thead>
+              <tr style={{ background: "#F8F9FD" }}>
+                <th style={{ padding: "14px 20px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Product</th>
+                <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>SKU</th>
+                <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Category</th>
+                <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Price</th>
+                <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Cost</th>
+                {storeView === "all" ? STORES.map(s => (
+                  <th key={s.id} style={{ padding: "14px 12px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "11px", textTransform: "uppercase" }}>{s.name.split(" ")[0]}</th>
+                )) : (
+                  <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Stock</th>
+                )}
+                <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Status</th>
+                <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(p => {
+                const status = getStockStatus(p);
+                return (
+                  <tr key={p.id} style={{ borderTop: `1px solid ${theme.border}` }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#FAFBFF"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <td style={{ padding: "14px 20px", fontWeight: 600, color: theme.textPrimary }}>{p.name}</td>
+                    <td style={{ padding: "14px 16px", color: theme.textSecondary, fontFamily: "'JetBrains Mono', monospace", fontSize: "12px" }}>{p.sku}</td>
+                    <td style={{ padding: "14px 16px" }}>
+                      <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "20px", background: `${theme.secondary}12`, color: theme.secondary, fontWeight: 500 }}>{p.category}</span>
+                    </td>
+                    <td style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(p.price)}</td>
+                    <td style={{ padding: "14px 16px", textAlign: "right", color: theme.textSecondary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(p.cost)}</td>
+                    {storeView === "all" ? STORES.map(s => (
+                      <td key={s.id} style={{ padding: "14px 12px", textAlign: "center", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", color: (p.stock[s.id] || 0) === 0 ? theme.danger : theme.textPrimary }}>{p.stock[s.id] || 0}</td>
+                    )) : (
+                      <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{p.stock[storeView] || 0}</td>
+                    )}
+                    <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", background: status.bg, color: status.color }}>{status.label}</span>
+                    </td>
+                    <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                      <div style={{ display: "flex", justifyContent: "center", gap: "4px" }}>
+                        <button onClick={() => openEdit(p)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "#F0F0F5"; e.currentTarget.style.color = theme.primary; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = theme.textMuted; }}>
+                          <Icons.Edit />
+                        </button>
+                        {canAccess(user.role, "all") && (
+                          <button onClick={() => deleteProduct(p.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "#FDE8EA"; e.currentTarget.style.color = theme.danger; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = theme.textMuted; }}>
+                            <Icons.Trash />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length === 0 && (
+          <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>
+            <p style={{ fontSize: "15px", marginBottom: "4px" }}>No products found</p>
+            <p style={{ fontSize: "13px" }}>Try adjusting your search or filters</p>
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit Modal */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editProduct ? "Edit Product" : "Add Product"} width="620px">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Product Name" required>
+            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="e.g. Ocean Kayak Explorer" />
+          </FormField>
+          <FormField label="SKU" required>
+            <input value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} style={inputStyle} />
+          </FormField>
+          <FormField label="Category" required>
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={selectStyle}>
+              {data.categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Unit">
+            <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} style={selectStyle}>
+              <option value="piece">Piece</option><option value="set">Set</option><option value="kg">Kg</option><option value="meter">Meter</option><option value="box">Box</option>
+            </select>
+          </FormField>
+          <FormField label="Selling Price (MUR)" required>
+            <input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} style={inputStyle} placeholder="0.00" />
+          </FormField>
+          <FormField label="Cost Price (MUR)">
+            <input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} style={inputStyle} placeholder="0.00" />
+          </FormField>
+          <FormField label="Minimum Stock Level">
+            <input type="number" value={form.minStock} onChange={e => setForm({ ...form, minStock: e.target.value })} style={inputStyle} />
+          </FormField>
+        </div>
+        <div style={{ marginTop: "8px" }}>
+          <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: theme.textPrimary, marginBottom: "10px" }}>Stock by Store</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+            {STORES.map(s => (
+              <div key={s.id}>
+                <label style={{ fontSize: "12px", color: theme.textSecondary, marginBottom: "4px", display: "block" }}>{s.name}</label>
+                <input type="number" value={form.stock[s.id] || 0}
+                  onChange={e => setForm({ ...form, stock: { ...form.stock, [s.id]: Number(e.target.value) } })}
+                  style={inputStyle} min="0" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveProduct} style={btnAccent}><Icons.Check /> {editProduct ? "Update" : "Add"} Product</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== INVOICES PAGE ====================
+function InvoicesPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [form, setForm] = useState({ client: "", items: [{ productId: "", qty: 1, price: 0 }], dueDate: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store });
+
+  const storeFilter = user.store === "all" ? null : user.store;
+  const invoices = data.invoices.filter(inv => !storeFilter || inv.store === storeFilter);
+
+  const addItem = () => setForm({ ...form, items: [...form.items, { productId: "", qty: 1, price: 0 }] });
+  const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
+  const updateItem = (idx, field, value) => {
+    const items = [...form.items];
+    items[idx] = { ...items[idx], [field]: value };
+    if (field === "productId") {
+      const prod = data.products.find(p => p.id === value);
+      if (prod) items[idx].price = prod.price;
+    }
+    setForm({ ...form, items });
+  };
+
+  const getSubtotal = (items) => items.reduce((s, it) => s + (it.qty * it.price), 0);
+  const getVAT = (items, vat) => vat ? getSubtotal(items) * VAT_RATE : 0;
+  const getTotal = (items, vat) => getSubtotal(items) + getVAT(items, vat);
+
+  const saveInvoice = () => {
+    if (!form.client || form.items.length === 0) return;
+    const inv = {
+      id: `INV-${String(data.invoices.length + 1).padStart(3, "0")}`,
+      ...form,
+      date: new Date().toISOString().split("T")[0],
+      status: "draft",
+      items: form.items.filter(it => it.productId && it.qty > 0),
+    };
+    setData(prev => ({ ...prev, invoices: [...prev.invoices, inv] }));
+    setShowModal(false);
+  };
+
+  const updateStatus = (id, status) => {
+    setData(prev => ({ ...prev, invoices: prev.invoices.map(inv => inv.id === id ? { ...inv, status } : inv) }));
+  };
+
+  const statusColors = {
+    draft: { bg: "#F0F0F5", color: theme.textMuted },
+    pending: { bg: "#FEF9E7", color: "#D4A843" },
+    paid: { bg: "#E8F6F3", color: theme.success },
+    overdue: { bg: "#FDE8EA", color: theme.danger },
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Invoices</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>{invoices.length} invoices · {invoices.filter(i => i.status === "pending").length} pending</p>
+        </div>
+        <button onClick={() => { setForm({ client: "", items: [{ productId: "", qty: 1, price: 0 }], dueDate: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store }); setShowModal(true); }} style={btnAccent}>
+          <Icons.Plus /> New Invoice
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "24px" }}>
+        {[
+          { label: "Draft", count: invoices.filter(i => i.status === "draft").length, ...statusColors.draft },
+          { label: "Pending", count: invoices.filter(i => i.status === "pending").length, ...statusColors.pending },
+          { label: "Paid", count: invoices.filter(i => i.status === "paid").length, ...statusColors.paid },
+          { label: "Overdue", count: invoices.filter(i => i.status === "overdue").length, ...statusColors.overdue },
+        ].map(s => (
+          <div key={s.label} style={{ background: "white", borderRadius: "12px", border: `1px solid ${theme.border}`, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: "13px", color: theme.textSecondary, fontWeight: 500 }}>{s.label}</span>
+            <span style={{ fontSize: "22px", fontWeight: 700, color: s.color, fontFamily: "'JetBrains Mono', monospace" }}>{s.count}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Invoice List */}
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }}>
+          <thead>
+            <tr style={{ background: "#F8F9FD" }}>
+              <th style={{ padding: "14px 20px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Invoice</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Client</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Store</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Date</th>
+              <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Amount</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Status</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px" }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.map(inv => {
+              const total = getTotal(inv.items, inv.vat);
+              const sc = statusColors[inv.status] || statusColors.draft;
+              return (
+                <tr key={inv.id} style={{ borderTop: `1px solid ${theme.border}` }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#FAFBFF"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <td style={{ padding: "14px 20px", fontWeight: 600, color: theme.primary, fontFamily: "'JetBrains Mono', monospace", fontSize: "13px" }}>{inv.id}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 500, color: theme.textPrimary }}>{inv.client}</td>
+                  <td style={{ padding: "14px 16px", color: theme.textSecondary, fontSize: "13px" }}>{STORES.find(s => s.id === inv.store)?.name}</td>
+                  <td style={{ padding: "14px 16px", color: theme.textSecondary }}>{formatDate(inv.date)}</td>
+                  <td style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(total, inv.currency)}</td>
+                  <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", background: sc.bg, color: sc.color }}>
+                      {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                    </span>
+                  </td>
+                  <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                    <div style={{ display: "flex", justifyContent: "center", gap: "4px" }}>
+                      <button onClick={() => setViewInvoice(inv)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "#F0F0F5"; e.currentTarget.style.color = theme.primary; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = theme.textMuted; }}
+                        title="View"><Icons.Eye /></button>
+                      {inv.status === "draft" && (
+                        <button onClick={() => updateStatus(inv.id, "pending")} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "#FEF9E7"; e.currentTarget.style.color = "#D4A843"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = theme.textMuted; }}
+                          title="Send">📤</button>
+                      )}
+                      {inv.status === "pending" && (
+                        <button onClick={() => updateStatus(inv.id, "paid")} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "#E8F6F3"; e.currentTarget.style.color = theme.success; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = theme.textMuted; }}
+                          title="Mark Paid"><Icons.Check /></button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {invoices.length === 0 && (
+          <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>
+            <p style={{ fontSize: "40px", marginBottom: "8px" }}>📄</p>
+            <p style={{ fontSize: "15px", marginBottom: "4px" }}>No invoices yet</p>
+            <p style={{ fontSize: "13px" }}>Create your first invoice to get started</p>
+          </div>
+        )}
+      </div>
+
+      {/* New Invoice Modal */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="New Invoice" width="700px">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Client Name" required>
+            <input value={form.client} onChange={e => setForm({ ...form, client: e.target.value })} style={inputStyle} placeholder="e.g. Blue Bay Resort" />
+          </FormField>
+          <FormField label="Store">
+            <select value={form.store} onChange={e => setForm({ ...form, store: e.target.value })} style={selectStyle} disabled={user.store !== "all"}>
+              {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Due Date">
+            <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} style={inputStyle} />
+          </FormField>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <FormField label="Currency">
+              <select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} style={selectStyle}>
+                {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Language">
+              <select value={form.lang} onChange={e => setForm({ ...form, lang: e.target.value })} style={selectStyle}>
+                <option value="en">English</option><option value="fr">Français</option>
+              </select>
+            </FormField>
+          </div>
+        </div>
+
+        <div style={{ marginTop: "12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: theme.textPrimary }}>Line Items</label>
+            <button onClick={addItem} style={{ ...btnSecondary, padding: "6px 14px", fontSize: "12px" }}><Icons.Plus /> Add Item</button>
+          </div>
+          {form.items.map((item, idx) => (
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: "2fr 80px 120px 40px", gap: "8px", marginBottom: "8px", alignItems: "end" }}>
+              <select value={item.productId} onChange={e => updateItem(idx, "productId", e.target.value)} style={selectStyle}>
+                <option value="">Select product...</option>
+                {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <input type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={inputStyle} min="1" placeholder="Qty" />
+              <input type="number" value={item.price} onChange={e => updateItem(idx, "price", Number(e.target.value))} style={inputStyle} placeholder="Price" />
+              {form.items.length > 1 && (
+                <button onClick={() => removeItem(idx)} style={{ background: "none", border: "none", cursor: "pointer", padding: "8px", color: theme.danger, display: "flex" }}>
+                  <Icons.Trash />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "16px 0" }}>
+          <input type="checkbox" checked={form.vat} onChange={e => setForm({ ...form, vat: e.target.checked })} id="vat-toggle" />
+          <label htmlFor="vat-toggle" style={{ fontSize: "13px", color: theme.textSecondary }}>Apply 15% VAT</label>
+        </div>
+
+        <div style={{ background: "#F8F9FD", borderRadius: "10px", padding: "16px 20px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+            <span style={{ fontSize: "13px", color: theme.textSecondary }}>Subtotal</span>
+            <span style={{ fontSize: "14px", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getSubtotal(form.items))}</span>
+          </div>
+          {form.vat && (
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+              <span style={{ fontSize: "13px", color: theme.textSecondary }}>VAT (15%)</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getVAT(form.items, form.vat))}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${theme.border}`, paddingTop: "8px" }}>
+            <span style={{ fontSize: "15px", fontWeight: 700, color: theme.textPrimary }}>Total</span>
+            <span style={{ fontSize: "18px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getTotal(form.items, form.vat))}</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveInvoice} style={btnAccent}><Icons.Check /> Create Invoice</button>
+        </div>
+      </Modal>
+
+      {/* View Invoice Modal */}
+      <Modal open={!!viewInvoice} onClose={() => setViewInvoice(null)} title={viewInvoice ? `Invoice ${viewInvoice.id}` : ""} width="640px">
+        {viewInvoice && (
+          <div>
+            {/* Invoice Preview */}
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "32px", background: "white" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "28px" }}>
+                <div>
+                  <div style={{ marginBottom: "8px" }}>
+                    <SealLogo size={120} />
+                  </div>
+                  <div style={{ fontSize: "11px", color: theme.textMuted }}>Sports Equipment & Leisure</div>
+                  <div style={{ fontSize: "11px", color: theme.textMuted }}>{STORES.find(s => s.id === viewInvoice.store)?.address}</div>
+                  <div style={{ fontSize: "11px", color: theme.textMuted }}>Mauritius · info@seal.mu</div>
+                  <div style={{ fontSize: "11px", color: theme.textMuted }}>Tel: +230 5250 8089</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{viewInvoice.id}</div>
+                  <div style={{ fontSize: "12px", color: theme.textSecondary }}>Date: {formatDate(viewInvoice.date)}</div>
+                  <div style={{ fontSize: "12px", color: theme.textSecondary }}>Due: {formatDate(viewInvoice.dueDate)}</div>
+                </div>
+              </div>
+              <div style={{ marginBottom: "20px" }}>
+                <div style={{ fontSize: "11px", color: theme.textMuted, textTransform: "uppercase", marginBottom: "4px" }}>{viewInvoice.lang === "fr" ? "Facturer à" : "Bill To"}</div>
+                <div style={{ fontSize: "15px", fontWeight: 600, color: theme.textPrimary }}>{viewInvoice.client}</div>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", marginBottom: "20px" }}>
+                <thead>
+                  <tr style={{ borderBottom: `2px solid ${theme.primary}` }}>
+                    <th style={{ padding: "10px 0", textAlign: "left", color: theme.primary, fontSize: "11px", textTransform: "uppercase" }}>{viewInvoice.lang === "fr" ? "Article" : "Item"}</th>
+                    <th style={{ padding: "10px 0", textAlign: "center", color: theme.primary, fontSize: "11px", textTransform: "uppercase" }}>{viewInvoice.lang === "fr" ? "Qté" : "Qty"}</th>
+                    <th style={{ padding: "10px 0", textAlign: "right", color: theme.primary, fontSize: "11px", textTransform: "uppercase" }}>{viewInvoice.lang === "fr" ? "Prix" : "Price"}</th>
+                    <th style={{ padding: "10px 0", textAlign: "right", color: theme.primary, fontSize: "11px", textTransform: "uppercase" }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewInvoice.items.map((it, i) => {
+                    const prod = data.products.find(p => p.id === it.productId);
+                    return (
+                      <tr key={i} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                        <td style={{ padding: "10px 0" }}>{prod?.name || "—"}</td>
+                        <td style={{ padding: "10px 0", textAlign: "center" }}>{it.qty}</td>
+                        <td style={{ padding: "10px 0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(it.price, viewInvoice.currency)}</td>
+                        <td style={{ padding: "10px 0", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(it.qty * it.price, viewInvoice.currency)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div style={{ width: "220px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "13px", color: theme.textSecondary }}>Subtotal</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "13px" }}>{formatCurrency(getSubtotal(viewInvoice.items), viewInvoice.currency)}</span>
+                  </div>
+                  {viewInvoice.vat && (
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                      <span style={{ fontSize: "13px", color: theme.textSecondary }}>VAT (15%)</span>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "13px" }}>{formatCurrency(getVAT(viewInvoice.items, true), viewInvoice.currency)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: `2px solid ${theme.primary}`, paddingTop: "8px", marginTop: "4px" }}>
+                    <span style={{ fontSize: "15px", fontWeight: 700 }}>Total</span>
+                    <span style={{ fontSize: "17px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getTotal(viewInvoice.items, viewInvoice.vat), viewInvoice.currency)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== EXPENSES PAGE ====================
+function ExpensesPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ description: "", amount: "", category: "Rent", date: new Date().toISOString().split("T")[0], store: user.store === "all" ? "black-river" : user.store, recurring: false });
+
+  const storeFilter = user.store === "all" ? null : user.store;
+  const expenses = data.expenses.filter(exp => !storeFilter || exp.store === storeFilter);
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const expenseCategories = ["Rent", "Utilities", "Shipping", "Marketing", "Salaries", "Maintenance", "Insurance", "Other"];
+
+  const saveExpense = () => {
+    if (!form.description || !form.amount) return;
+    setData(prev => ({ ...prev, expenses: [...prev.expenses, { id: genId("e"), ...form, amount: Number(form.amount) }] }));
+    setShowModal(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Expenses</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>Total: {formatCurrency(totalExpenses)}</p>
+        </div>
+        <button onClick={() => { setForm({ description: "", amount: "", category: "Rent", date: new Date().toISOString().split("T")[0], store: user.store === "all" ? "black-river" : user.store, recurring: false }); setShowModal(true); }} style={btnAccent}>
+          <Icons.Plus /> Add Expense
+        </button>
+      </div>
+
+      {/* Expense by category */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "12px", marginBottom: "24px" }}>
+        {expenseCategories.filter(c => expenses.some(e => e.category === c)).map(cat => {
+          const catTotal = expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0);
+          return (
+            <div key={cat} style={{ background: "white", borderRadius: "12px", border: `1px solid ${theme.border}`, padding: "16px" }}>
+              <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "6px" }}>{cat}</div>
+              <div style={{ fontSize: "17px", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: theme.textPrimary }}>{formatCurrency(catTotal)}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }}>
+          <thead>
+            <tr style={{ background: "#F8F9FD" }}>
+              <th style={{ padding: "14px 20px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Description</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Category</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Store</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Date</th>
+              <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Amount</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Recurring</th>
+            </tr>
+          </thead>
+          <tbody>
+            {expenses.map(exp => (
+              <tr key={exp.id} style={{ borderTop: `1px solid ${theme.border}` }}>
+                <td style={{ padding: "14px 20px", fontWeight: 500, color: theme.textPrimary }}>{exp.description}</td>
+                <td style={{ padding: "14px 16px" }}><span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "20px", background: `${theme.danger}10`, color: theme.danger, fontWeight: 500 }}>{exp.category}</span></td>
+                <td style={{ padding: "14px 16px", color: theme.textSecondary, fontSize: "13px" }}>{STORES.find(s => s.id === exp.store)?.name}</td>
+                <td style={{ padding: "14px 16px", color: theme.textSecondary }}>{formatDate(exp.date)}</td>
+                <td style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", color: theme.danger }}>{formatCurrency(exp.amount)}</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>{exp.recurring ? "🔄" : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Add Expense">
+        <FormField label="Description" required>
+          <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={inputStyle} placeholder="e.g. Store Rent" />
+        </FormField>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Amount (MUR)" required>
+            <input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} style={inputStyle} placeholder="0.00" />
+          </FormField>
+          <FormField label="Category">
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={selectStyle}>
+              {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Date">
+            <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} />
+          </FormField>
+          <FormField label="Store">
+            <select value={form.store} onChange={e => setForm({ ...form, store: e.target.value })} style={selectStyle} disabled={user.store !== "all"}>
+              {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+          <input type="checkbox" checked={form.recurring} onChange={e => setForm({ ...form, recurring: e.target.checked })} id="recurring" />
+          <label htmlFor="recurring" style={{ fontSize: "13px", color: theme.textSecondary }}>Recurring expense</label>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveExpense} style={btnAccent}><Icons.Check /> Add Expense</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== TRANSFERS PAGE ====================
+function TransfersPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ from: "black-river", to: "grand-baie", productId: "", qty: 1, note: "" });
+
+  const saveTransfer = () => {
+    if (!form.productId || !form.qty || form.from === form.to) return;
+    const product = data.products.find(p => p.id === form.productId);
+    if (!product || (product.stock[form.from] || 0) < form.qty) return;
+
+    setData(prev => ({
+      ...prev,
+      products: prev.products.map(p => p.id === form.productId ? {
+        ...p, stock: { ...p.stock, [form.from]: (p.stock[form.from] || 0) - Number(form.qty), [form.to]: (p.stock[form.to] || 0) + Number(form.qty) }
+      } : p),
+      transfers: [...prev.transfers, { id: genId("tr"), ...form, qty: Number(form.qty), date: new Date().toISOString().split("T")[0], productName: product.name }],
+    }));
+    setShowModal(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Stock Transfers</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>Move inventory between stores</p>
+        </div>
+        <button onClick={() => { setForm({ from: "black-river", to: "grand-baie", productId: "", qty: 1, note: "" }); setShowModal(true); }} style={btnAccent}>
+          <Icons.Plus /> New Transfer
+        </button>
+      </div>
+
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }}>
+          <thead>
+            <tr style={{ background: "#F8F9FD" }}>
+              <th style={{ padding: "14px 20px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Product</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>From</th>
+              <th style={{ padding: "14px 8px", textAlign: "center", color: theme.textMuted }}>→</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>To</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Qty</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.transfers.map(tr => (
+              <tr key={tr.id} style={{ borderTop: `1px solid ${theme.border}` }}>
+                <td style={{ padding: "14px 20px", fontWeight: 500, color: theme.textPrimary }}>{tr.productName}</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>{STORES.find(s => s.id === tr.from)?.name}</td>
+                <td style={{ padding: "14px 8px", textAlign: "center", color: theme.accent }}>→</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>{STORES.find(s => s.id === tr.to)?.name}</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{tr.qty}</td>
+                <td style={{ padding: "14px 16px", color: theme.textSecondary }}>{formatDate(tr.date)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {data.transfers.length === 0 && (
+          <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>
+            <p style={{ fontSize: "40px", marginBottom: "8px" }}>🔄</p>
+            <p style={{ fontSize: "15px" }}>No transfers yet</p>
+          </div>
+        )}
+      </div>
+
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Stock Transfer">
+        <FormField label="Product" required>
+          <select value={form.productId} onChange={e => setForm({ ...form, productId: e.target.value })} style={selectStyle}>
+            <option value="">Select product...</option>
+            {data.products.map(p => <option key={p.id} value={p.id}>{p.name} ({getTotalStock(p)} total)</option>)}
+          </select>
+        </FormField>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="From Store">
+            <select value={form.from} onChange={e => setForm({ ...form, from: e.target.value })} style={selectStyle}>
+              {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            {form.productId && <span style={{ fontSize: "12px", color: theme.textMuted }}>Available: {data.products.find(p => p.id === form.productId)?.stock[form.from] || 0}</span>}
+          </FormField>
+          <FormField label="To Store">
+            <select value={form.to} onChange={e => setForm({ ...form, to: e.target.value })} style={selectStyle}>
+              {STORES.filter(s => s.id !== form.from).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Quantity">
+          <input type="number" value={form.qty} onChange={e => setForm({ ...form, qty: e.target.value })} style={inputStyle} min="1" />
+        </FormField>
+        <FormField label="Note">
+          <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} style={inputStyle} placeholder="Optional note..." />
+        </FormField>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveTransfer} style={btnAccent}><Icons.Transfer /> Transfer</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== TIME TRACKING PAGE ====================
+function TimeTrackingPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ userId: user.id, date: new Date().toISOString().split("T")[0], hoursWorked: 8, store: user.store === "all" ? "black-river" : user.store, note: "" });
+
+  const saveEntry = () => {
+    if (!form.hoursWorked) return;
+    setData(prev => ({ ...prev, timeEntries: [...prev.timeEntries, { id: genId("t"), ...form, hoursWorked: Number(form.hoursWorked) }] }));
+    setShowModal(false);
+  };
+
+  const entries = data.timeEntries.filter(t => user.store === "all" || t.store === user.store);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Time Tracking</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>Track employee hours</p>
+        </div>
+        <button onClick={() => { setForm({ userId: user.id, date: new Date().toISOString().split("T")[0], hoursWorked: 8, store: user.store === "all" ? "black-river" : user.store, note: "" }); setShowModal(true); }} style={btnAccent}>
+          <Icons.Plus /> Log Time
+        </button>
+      </div>
+
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }}>
+          <thead>
+            <tr style={{ background: "#F8F9FD" }}>
+              <th style={{ padding: "14px 20px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Employee</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Date</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Hours</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Store</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map(t => {
+              const emp = data.users.find(u => u.id === t.userId);
+              return (
+                <tr key={t.id} style={{ borderTop: `1px solid ${theme.border}` }}>
+                  <td style={{ padding: "14px 20px", fontWeight: 500, color: theme.textPrimary }}>{emp?.avatar} {emp?.name || "—"}</td>
+                  <td style={{ padding: "14px 16px", color: theme.textSecondary }}>{formatDate(t.date)}</td>
+                  <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: theme.primary }}>{t.hoursWorked}h</td>
+                  <td style={{ padding: "14px 16px", color: theme.textSecondary }}>{STORES.find(s => s.id === t.store)?.name}</td>
+                  <td style={{ padding: "14px 16px", color: theme.textMuted, fontSize: "13px" }}>{t.note || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {entries.length === 0 && (
+          <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>
+            <p style={{ fontSize: "40px", marginBottom: "8px" }}>⏱️</p>
+            <p style={{ fontSize: "15px" }}>No time entries yet</p>
+          </div>
+        )}
+      </div>
+
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Log Time">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Employee">
+            <select value={form.userId} onChange={e => setForm({ ...form, userId: e.target.value })} style={selectStyle}>
+              {data.users.filter(u => user.role === "super_admin" || u.id === user.id).map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="Date">
+            <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} />
+          </FormField>
+          <FormField label="Hours Worked">
+            <input type="number" value={form.hoursWorked} onChange={e => setForm({ ...form, hoursWorked: e.target.value })} style={inputStyle} step="0.5" min="0" max="24" />
+          </FormField>
+          <FormField label="Store">
+            <select value={form.store} onChange={e => setForm({ ...form, store: e.target.value })} style={selectStyle} disabled={user.store !== "all"}>
+              {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Note">
+          <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} style={inputStyle} placeholder="Optional note..." />
+        </FormField>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveEntry} style={btnAccent}><Icons.Check /> Log Time</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== REPORTS PAGE ====================
+function ReportsPage({ data, user }) {
+  const storeFilter = user.store === "all" ? null : user.store;
+
+  const revenue = data.invoices.filter(i => i.status === "paid" && (!storeFilter || i.store === storeFilter))
+    .reduce((s, inv) => s + inv.items.reduce((a, it) => a + it.qty * it.price, 0), 0);
+  const vatCollected = revenue * VAT_RATE;
+  const expenses = data.expenses.filter(e => !storeFilter || e.store === storeFilter).reduce((s, e) => s + e.amount, 0);
+  const profit = revenue - expenses;
+  const costOfGoods = data.invoices.filter(i => i.status === "paid" && (!storeFilter || i.store === storeFilter))
+    .reduce((s, inv) => s + inv.items.reduce((a, it) => {
+      const prod = data.products.find(p => p.id === it.productId);
+      return a + (prod ? prod.cost * it.qty : 0);
+    }, 0), 0);
+
+  return (
+    <div>
+      <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "24px" }}>Reports & Insights</h1>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "28px" }}>
+        <StatCard title="Revenue" value={formatCurrency(revenue)} icon={Icons.ArrowUp} color={theme.success} />
+        <StatCard title="Expenses" value={formatCurrency(expenses)} icon={Icons.ArrowDown} color={theme.danger} />
+        <StatCard title="Net Profit" value={formatCurrency(profit)} icon={Icons.Report} color={profit >= 0 ? theme.success : theme.danger} />
+        <StatCard title="VAT Collected" value={formatCurrency(vatCollected)} subtitle="15% on revenue" icon={Icons.Expense} color={theme.secondary} />
+        <StatCard title="Cost of Goods" value={formatCurrency(costOfGoods)} icon={Icons.Inventory} color={theme.warning} />
+        <StatCard title="Gross Margin" value={revenue > 0 ? `${((1 - costOfGoods / revenue) * 100).toFixed(1)}%` : "—"} icon={Icons.Report} color={theme.primary} />
+      </div>
+
+      {/* Revenue by Store */}
+      {user.store === "all" && (
+        <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, padding: "24px", marginBottom: "20px" }}>
+          <h3 style={{ fontSize: "16px", fontWeight: 700, color: theme.textPrimary, marginBottom: "20px" }}>Revenue by Store</h3>
+          <div style={{ display: "flex", gap: "20px" }}>
+            {STORES.map(store => {
+              const storeRev = data.invoices.filter(i => i.store === store.id && i.status === "paid")
+                .reduce((s, inv) => s + inv.items.reduce((a, it) => a + it.qty * it.price, 0), 0);
+              const pct = revenue > 0 ? (storeRev / revenue * 100) : 0;
+              return (
+                <div key={store.id} style={{ flex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: theme.textPrimary }}>{store.name}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(storeRev)}</span>
+                  </div>
+                  <div style={{ height: "8px", background: theme.border, borderRadius: "4px", overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg, ${theme.accent}, ${theme.secondary})`, borderRadius: "4px", transition: "width 0.5s ease" }} />
+                  </div>
+                  <span style={{ fontSize: "11px", color: theme.textMuted }}>{pct.toFixed(1)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Top Products */}
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <div style={{ padding: "18px 22px", borderBottom: `1px solid ${theme.border}` }}>
+          <h3 style={{ fontSize: "15px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>Top Selling Products</h3>
+        </div>
+        <div>
+          {data.products.map(p => {
+            const soldQty = data.invoices.filter(i => i.status === "paid" && (!storeFilter || i.store === storeFilter))
+              .reduce((s, inv) => s + inv.items.filter(it => it.productId === p.id).reduce((a, it) => a + it.qty, 0), 0);
+            return { ...p, soldQty };
+          }).filter(p => p.soldQty > 0).sort((a, b) => b.soldQty - a.soldQty).slice(0, 8).map((p, i) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <span style={{ width: "28px", height: "28px", borderRadius: "8px", background: i < 3 ? `${theme.accent}20` : "#F0F0F5", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: i < 3 ? theme.accentDark : theme.textMuted }}>{i + 1}</span>
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary }}>{p.name}</div>
+                  <div style={{ fontSize: "12px", color: theme.textMuted }}>{p.category}</div>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "14px", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{p.soldQty} units</div>
+                <div style={{ fontSize: "12px", color: theme.success, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(p.soldQty * p.price)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== SETTINGS/CATEGORIES PAGE ====================
+function SettingsPage({ data, setData, user }) {
+  const [newCat, setNewCat] = useState("");
+  const [editCat, setEditCat] = useState(null);
+  const [editCatName, setEditCatName] = useState("");
+  const [editBusiness, setEditBusiness] = useState(false);
+  const [businessForm, setBusinessForm] = useState({
+    name: "SEAL",
+    tagline: "Seal your Deal",
+    email: "info@seal.mu",
+    phone: "+230 5250 8089",
+    website: "seal.mu",
+    vatNumber: "VAT123456",
+  });
+  const [viewStore, setViewStore] = useState(null);
+  const [newSupplier, setNewSupplier] = useState(false);
+  const [supplierForm, setSupplierForm] = useState({ name: "", email: "", phone: "", address: "", category: "", notes: "", paymentTerms: "Net 30" });
+
+  const addCategory = () => {
+    if (!newCat.trim() || data.categories.includes(newCat.trim())) return;
+    setData(prev => ({ ...prev, categories: [...prev.categories, newCat.trim()] }));
+    setNewCat("");
+  };
+
+  const removeCategory = (cat) => {
+    if (confirm(`Delete "${cat}" category? Products in this category won't be affected.`)) {
+      setData(prev => ({ ...prev, categories: prev.categories.filter(c => c !== cat) }));
+    }
+  };
+
+  const startEditCat = (cat) => {
+    setEditCat(cat);
+    setEditCatName(cat);
+  };
+
+  const saveEditCat = () => {
+    if (!editCatName.trim()) return;
+    setData(prev => ({
+      ...prev,
+      categories: prev.categories.map(c => c === editCat ? editCatName.trim() : c),
+      products: prev.products.map(p => p.category === editCat ? { ...p, category: editCatName.trim() } : p),
+    }));
+    setEditCat(null);
+  };
+
+  const saveBusinessInfo = () => {
+    // In a real app, this would save to settings
+    setEditBusiness(false);
+  };
+
+  const addSupplier = () => {
+    if (!supplierForm.name) return;
+    setData(prev => ({
+      ...prev,
+      suppliers: [...(prev.suppliers || []), { id: genId("s"), ...supplierForm }],
+    }));
+    setNewSupplier(false);
+    setSupplierForm({ name: "", email: "", phone: "", address: "", category: "", notes: "", paymentTerms: "Net 30" });
+  };
+
+  const deleteSupplier = (id) => {
+    if (confirm("Delete this supplier?")) {
+      setData(prev => ({ ...prev, suppliers: prev.suppliers.filter(s => s.id !== id) }));
+    }
+  };
+
+  return (
+    <div>
+      <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "24px" }}>Settings</h1>
+
+      {/* Categories - Clickable & Editable */}
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, padding: "24px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h3 style={{ fontSize: "16px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>Product Categories</h3>
+          <span style={{ fontSize: "12px", color: theme.textMuted }}>{data.categories.length} categories · Click to edit</span>
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+          <input value={newCat} onChange={e => setNewCat(e.target.value)} onKeyDown={e => e.key === "Enter" && addCategory()} style={{ ...inputStyle, flex: 1 }} placeholder="New category name..." />
+          <button onClick={addCategory} style={btnAccent}><Icons.Plus /> Add</button>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+          {data.categories.map(cat => (
+            <div key={cat} 
+              onClick={() => !editCat && startEditCat(cat)}
+              style={{
+                display: "flex", alignItems: "center", gap: "6px",
+                padding: "6px 14px", borderRadius: "20px",
+                background: editCat === cat ? `${theme.accent}20` : "#F0F0F5", 
+                fontSize: "13px", fontWeight: 500, color: theme.textPrimary,
+                cursor: "pointer", transition: "all 0.15s",
+                border: editCat === cat ? `2px solid ${theme.accent}` : "2px solid transparent",
+              }}
+            >
+              {editCat === cat ? (
+                <>
+                  <input 
+                    value={editCatName} 
+                    onChange={e => setEditCatName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") saveEditCat(); if (e.key === "Escape") setEditCat(null); }}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                    style={{ border: "none", background: "transparent", fontSize: "13px", fontWeight: 500, outline: "none", width: "100px" }}
+                  />
+                  <button onClick={(e) => { e.stopPropagation(); saveEditCat(); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: theme.success, display: "flex" }}>
+                    <Icons.Check />
+                  </button>
+                </>
+              ) : (
+                <>
+                  {cat}
+                  <span style={{ fontSize: "10px", color: theme.textMuted, marginLeft: "4px" }}>
+                    ({data.products.filter(p => p.category === cat).length})
+                  </span>
+                  <button onClick={(e) => { e.stopPropagation(); removeCategory(cat); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: theme.textMuted, display: "flex", fontSize: "12px" }}
+                    onMouseEnter={e => e.currentTarget.style.color = theme.danger}
+                    onMouseLeave={e => e.currentTarget.style.color = theme.textMuted}>
+                    <Icons.X />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Business Info - Editable */}
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, padding: "24px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h3 style={{ fontSize: "16px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>Business Information</h3>
+          <button onClick={() => setEditBusiness(!editBusiness)} style={{ ...btnSecondary, padding: "6px 14px", fontSize: "12px" }}>
+            {editBusiness ? <><Icons.X /> Cancel</> : <><Icons.Edit /> Edit</>}
+          </button>
+        </div>
+        
+        {editBusiness ? (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <FormField label="Business Name">
+                <input value={businessForm.name} onChange={e => setBusinessForm({ ...businessForm, name: e.target.value })} style={inputStyle} />
+              </FormField>
+              <FormField label="Tagline">
+                <input value={businessForm.tagline} onChange={e => setBusinessForm({ ...businessForm, tagline: e.target.value })} style={inputStyle} />
+              </FormField>
+              <FormField label="Email">
+                <input type="email" value={businessForm.email} onChange={e => setBusinessForm({ ...businessForm, email: e.target.value })} style={inputStyle} />
+              </FormField>
+              <FormField label="Phone">
+                <input value={businessForm.phone} onChange={e => setBusinessForm({ ...businessForm, phone: e.target.value })} style={inputStyle} />
+              </FormField>
+              <FormField label="Website">
+                <input value={businessForm.website} onChange={e => setBusinessForm({ ...businessForm, website: e.target.value })} style={inputStyle} />
+              </FormField>
+              <FormField label="VAT Number">
+                <input value={businessForm.vatNumber} onChange={e => setBusinessForm({ ...businessForm, vatNumber: e.target.value })} style={inputStyle} />
+              </FormField>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
+              <button onClick={saveBusinessInfo} style={btnAccent}><Icons.Check /> Save Changes</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            {[
+              { label: "Business Name", value: "SEAL — Sports Equipment & Leisure" },
+              { label: "Tagline", value: "Seal your Deal" },
+              { label: "Since", value: "2016" },
+              { label: "Email", value: "info@seal.mu" },
+              { label: "Mobile", value: "+230 5250 8089" },
+              { label: "Website", value: "seal.mu", isLink: true },
+              { label: "Primary Currency", value: "MUR (Mauritian Rupee)" },
+              { label: "VAT Rate", value: "15%" },
+            ].map((item, i) => (
+              <div key={i} style={{ padding: "12px", background: "#F8F9FD", borderRadius: "10px", cursor: "pointer" }} onClick={() => setEditBusiness(true)}>
+                <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "4px" }}>{item.label}</div>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: item.isLink ? theme.primary : theme.textPrimary }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stores - Clickable */}
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, padding: "24px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h3 style={{ fontSize: "16px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>Store Locations</h3>
+          <span style={{ fontSize: "12px", color: theme.textMuted }}>{STORES.length} stores · Click for details</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+          {STORES.map(s => {
+            const storeProducts = data.products.filter(p => (p.stock[s.id] || 0) > 0).length;
+            const storeInvoices = data.invoices.filter(i => i.store === s.id).length;
+            return (
+              <div key={s.id} 
+                onClick={() => setViewStore(s)}
+                style={{ 
+                  padding: "16px", borderRadius: "12px", border: `1px solid ${theme.border}`, 
+                  position: "relative", cursor: "pointer", transition: "all 0.2s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
+              >
+                {s.isHQ && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: theme.accent, borderRadius: "12px 12px 0 0" }} />}
+                <div style={{ fontSize: "15px", fontWeight: 600, color: theme.textPrimary }}>{s.name}</div>
+                <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "10px" }}>{s.isHQ ? "Headquarters" : "Branch"}</div>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <div>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: theme.primary }}>{storeProducts}</div>
+                    <div style={{ fontSize: "10px", color: theme.textMuted }}>Products</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: theme.secondary }}>{storeInvoices}</div>
+                    <div style={{ fontSize: "10px", color: theme.textMuted }}>Invoices</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Suppliers - Clickable & Editable */}
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, padding: "24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h3 style={{ fontSize: "16px", fontWeight: 700, color: theme.textPrimary, margin: 0 }}>Suppliers</h3>
+          <button onClick={() => setNewSupplier(true)} style={{ ...btnSecondary, padding: "6px 14px", fontSize: "12px" }}><Icons.Plus /> Add Supplier</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+          {(data.suppliers || []).map(s => (
+            <div key={s.id} style={{ 
+              padding: "16px", borderRadius: "12px", border: `1px solid ${theme.border}`, 
+              cursor: "pointer", transition: "all 0.15s",
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "#FAFBFF"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary }}>{s.name}</div>
+                  <div style={{ fontSize: "12px", color: theme.textMuted }}>{s.email}</div>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); deleteSupplier(s.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: theme.textMuted }}
+                  onMouseEnter={e => e.currentTarget.style.color = theme.danger}
+                  onMouseLeave={e => e.currentTarget.style.color = theme.textMuted}>
+                  <Icons.Trash />
+                </button>
+              </div>
+              {s.category && <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "10px", background: `${theme.secondary}12`, color: theme.secondary, fontWeight: 500 }}>{s.category}</span>}
+              <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "8px" }}>{s.paymentTerms}</div>
+            </div>
+          ))}
+        </div>
+        {(!data.suppliers || data.suppliers.length === 0) && (
+          <p style={{ textAlign: "center", color: theme.textMuted, fontSize: "13px", padding: "20px" }}>No suppliers yet. Add your first supplier.</p>
+        )}
+      </div>
+
+      {/* Store Detail Modal */}
+      <Modal open={!!viewStore} onClose={() => setViewStore(null)} title={viewStore?.name || ""} width="450px">
+        {viewStore && (
+          <div>
+            {viewStore.isHQ && (
+              <div style={{ display: "inline-block", fontSize: "11px", fontWeight: 600, padding: "4px 12px", borderRadius: "20px", background: `${theme.accent}20`, color: theme.accent, marginBottom: "16px" }}>
+                HEADQUARTERS
+              </div>
+            )}
+            <div style={{ background: "#F8F9FD", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+              <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Address</div>
+              <div style={{ fontSize: "15px", fontWeight: 500, color: theme.textPrimary }}>{viewStore.address}</div>
+            </div>
+            {viewStore.phone && (
+              <div style={{ background: "#F8F9FD", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+                <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Phone</div>
+                <div style={{ fontSize: "15px", fontWeight: 500, color: theme.textPrimary }}>{viewStore.phone}</div>
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div style={{ background: `${theme.primary}08`, borderRadius: "12px", padding: "16px", textAlign: "center" }}>
+                <div style={{ fontSize: "28px", fontWeight: 700, color: theme.primary }}>{data.products.filter(p => (p.stock[viewStore.id] || 0) > 0).length}</div>
+                <div style={{ fontSize: "12px", color: theme.textMuted }}>Products in Stock</div>
+              </div>
+              <div style={{ background: `${theme.secondary}08`, borderRadius: "12px", padding: "16px", textAlign: "center" }}>
+                <div style={{ fontSize: "28px", fontWeight: 700, color: theme.secondary }}>{data.invoices.filter(i => i.store === viewStore.id).length}</div>
+                <div style={{ fontSize: "12px", color: theme.textMuted }}>Total Invoices</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Add Supplier Modal */}
+      <Modal open={newSupplier} onClose={() => setNewSupplier(false)} title="Add Supplier">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Supplier Name" required>
+            <input value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} style={inputStyle} placeholder="Company name" />
+          </FormField>
+          <FormField label="Category">
+            <input value={supplierForm.category} onChange={e => setSupplierForm({ ...supplierForm, category: e.target.value })} style={inputStyle} placeholder="e.g. Kayaks" />
+          </FormField>
+          <FormField label="Email">
+            <input type="email" value={supplierForm.email} onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} style={inputStyle} placeholder="email@example.com" />
+          </FormField>
+          <FormField label="Phone">
+            <input value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} style={inputStyle} placeholder="+1 555 1234" />
+          </FormField>
+          <FormField label="Address">
+            <input value={supplierForm.address} onChange={e => setSupplierForm({ ...supplierForm, address: e.target.value })} style={inputStyle} placeholder="City, Country" />
+          </FormField>
+          <FormField label="Payment Terms">
+            <select value={supplierForm.paymentTerms} onChange={e => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })} style={selectStyle}>
+              <option>Net 15</option>
+              <option>Net 30</option>
+              <option>Net 60</option>
+              <option>Due on Receipt</option>
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Notes">
+          <textarea value={supplierForm.notes} onChange={e => setSupplierForm({ ...supplierForm, notes: e.target.value })} style={{ ...inputStyle, minHeight: "60px" }} placeholder="Additional notes..." />
+        </FormField>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setNewSupplier(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={addSupplier} style={btnAccent}><Icons.Check /> Add Supplier</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== USERS PAGE ====================
+function UsersPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+  const [viewUser, setViewUser] = useState(null);
+  const [showPin, setShowPin] = useState({});
+  const [form, setForm] = useState({ name: "", pin: "", role: "employee", store: "black-river", avatar: "employee" });
+
+  const openAdd = () => {
+    setEditUser(null);
+    setForm({ name: "", pin: "", role: "employee", store: "black-river", avatar: "employee" });
+    setShowModal(true);
+  };
+
+  const openEdit = (u) => {
+    setEditUser(u);
+    setForm({ name: u.name, pin: u.pin, role: u.role, store: u.store, avatar: u.avatar || "employee" });
+    setShowModal(true);
+    setViewUser(null);
+  };
+
+  const saveUser = () => {
+    if (!form.name || !form.pin || form.pin.length !== 4) return;
+    if (editUser) {
+      setData(prev => ({
+        ...prev,
+        users: prev.users.map(u => u.id === editUser.id ? { ...u, ...form } : u),
+      }));
+    } else {
+      setData(prev => ({ ...prev, users: [...prev.users, { id: genId("u"), ...form }] }));
+    }
+    setShowModal(false);
+  };
+
+  const deleteUser = (id) => {
+    if (data.users.length <= 1) {
+      alert("Cannot delete the last user!");
+      return;
+    }
+    if (id === user.id) {
+      alert("Cannot delete your own account!");
+      return;
+    }
+    if (confirm("Are you sure you want to delete this user?")) {
+      setData(prev => ({ ...prev, users: prev.users.filter(u => u.id !== id) }));
+      setViewUser(null);
+    }
+  };
+
+  const toggleShowPin = (id) => {
+    setShowPin(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Get user stats
+  const getUserStats = (u) => {
+    const timeEntries = data.timeEntries.filter(t => t.userId === u.id);
+    const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
+    const invoicesCreated = data.invoices.filter(i => i.createdBy === u.id).length;
+    return { totalHours, invoicesCreated, entriesCount: timeEntries.length };
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Users</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>{data.users.length} users</p>
+        </div>
+        <button onClick={openAdd} style={btnAccent}>
+          <Icons.Plus /> Add User
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
+        {data.users.map(u => {
+          const roleColor = ROLES[u.role.toUpperCase()]?.color || theme.secondary;
+          const isCurrentUser = u.id === user.id;
+          return (
+            <div key={u.id} 
+              onClick={() => setViewUser(u)}
+              style={{ 
+                background: "white", borderRadius: "16px", border: `1px solid ${theme.border}`, 
+                padding: "22px", position: "relative", cursor: "pointer", transition: "all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
+            >
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: roleColor, borderRadius: "16px 16px 0 0" }} />
+              {isCurrentUser && (
+                <div style={{ position: "absolute", top: "12px", right: "12px", fontSize: "10px", fontWeight: 600, padding: "3px 8px", borderRadius: "10px", background: `${theme.success}15`, color: theme.success }}>
+                  You
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px", marginTop: "4px" }}>
+                <UserAvatar user={u} size={52} />
+                <div>
+                  <div style={{ fontSize: "17px", fontWeight: 700, color: theme.textPrimary }}>{u.name}</div>
+                  <span style={{
+                    fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px",
+                    background: `${roleColor}15`, color: roleColor,
+                  }}>{ROLES[u.role.toUpperCase()]?.label || u.role}</span>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div style={{ padding: "10px 12px", background: "#F8F9FD", borderRadius: "10px" }}>
+                  <div style={{ fontSize: "10px", color: theme.textMuted, marginBottom: "2px" }}>Store</div>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: theme.textPrimary }}>{u.store === "all" ? "All Stores" : STORES.find(s => s.id === u.store)?.name}</div>
+                </div>
+                <div style={{ padding: "10px 12px", background: "#F8F9FD", borderRadius: "10px" }}>
+                  <div style={{ fontSize: "10px", color: theme.textMuted, marginBottom: "2px" }}>PIN</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: theme.textPrimary, fontFamily: "'JetBrains Mono', monospace" }}>
+                      {showPin[u.id] ? u.pin : "••••"}
+                    </span>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); toggleShowPin(u.id); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: theme.textMuted }}
+                    >
+                      <Icons.Eye />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "12px", textAlign: "center" }}>
+                Click to view details & edit
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* View User Modal */}
+      <Modal open={!!viewUser} onClose={() => setViewUser(null)} title={viewUser?.name || "User Details"} width="550px">
+        {viewUser && (() => {
+          const roleColor = ROLES[viewUser.role.toUpperCase()]?.color || theme.secondary;
+          const stats = getUserStats(viewUser);
+          const isCurrentUser = viewUser.id === user.id;
+          return (
+            <div>
+              {/* User Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "24px", padding: "20px", background: `${roleColor}08`, borderRadius: "16px" }}>
+                <UserAvatar user={viewUser} size={72} />
+                <div>
+                  <div style={{ fontSize: "22px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>{viewUser.name}</div>
+                  <span style={{
+                    fontSize: "12px", fontWeight: 600, padding: "4px 12px", borderRadius: "20px",
+                    background: `${roleColor}20`, color: roleColor,
+                  }}>{ROLES[viewUser.role.toUpperCase()]?.label || viewUser.role}</span>
+                  {isCurrentUser && (
+                    <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "10px", background: `${theme.success}15`, color: theme.success }}>
+                      Current User
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* User Details */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "24px" }}>
+                <div style={{ padding: "16px", background: "#F8F9FD", borderRadius: "12px" }}>
+                  <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "4px" }}>Assigned Store</div>
+                  <div style={{ fontSize: "15px", fontWeight: 600, color: theme.textPrimary }}>{viewUser.store === "all" ? "All Stores" : STORES.find(s => s.id === viewUser.store)?.name}</div>
+                </div>
+                <div style={{ padding: "16px", background: "#F8F9FD", borderRadius: "12px" }}>
+                  <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "4px" }}>Login PIN</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "18px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "4px" }}>
+                      {showPin[viewUser.id] ? viewUser.pin : "••••"}
+                    </span>
+                    <button 
+                      onClick={() => toggleShowPin(viewUser.id)}
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: theme.textMuted }}
+                    >
+                      <Icons.Eye />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Activity Stats */}
+              <div style={{ marginBottom: "24px" }}>
+                <h4 style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary, marginBottom: "12px" }}>Activity</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                  <div style={{ padding: "16px", background: `${theme.primary}08`, borderRadius: "12px", textAlign: "center" }}>
+                    <div style={{ fontSize: "24px", fontWeight: 700, color: theme.primary }}>{stats.totalHours.toFixed(1)}</div>
+                    <div style={{ fontSize: "11px", color: theme.textMuted }}>Hours Logged</div>
+                  </div>
+                  <div style={{ padding: "16px", background: `${theme.secondary}08`, borderRadius: "12px", textAlign: "center" }}>
+                    <div style={{ fontSize: "24px", fontWeight: 700, color: theme.secondary }}>{stats.entriesCount}</div>
+                    <div style={{ fontSize: "11px", color: theme.textMuted }}>Time Entries</div>
+                  </div>
+                  <div style={{ padding: "16px", background: `${theme.success}08`, borderRadius: "12px", textAlign: "center" }}>
+                    <div style={{ fontSize: "24px", fontWeight: 700, color: theme.success }}>{stats.invoicesCreated}</div>
+                    <div style={{ fontSize: "11px", color: theme.textMuted }}>Invoices Created</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Permissions */}
+              <div style={{ marginBottom: "24px" }}>
+                <h4 style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary, marginBottom: "12px" }}>Permissions</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {["Dashboard", "Inventory", "Invoices", "Quotes", "Bills", "Expenses", "Reports", "Users", "Settings"].map(perm => {
+                    const hasAccess = canAccess(viewUser.role, perm.toLowerCase());
+                    return (
+                      <span key={perm} style={{
+                        fontSize: "11px", fontWeight: 500, padding: "4px 12px", borderRadius: "20px",
+                        background: hasAccess ? `${theme.success}12` : "#F0F0F5",
+                        color: hasAccess ? theme.success : theme.textMuted,
+                      }}>
+                        {hasAccess && <span style={{ marginRight: "4px" }}>✓</span>}
+                        {perm}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+                {!isCurrentUser && (
+                  <button onClick={() => deleteUser(viewUser.id)} style={{ ...btnSecondary, color: theme.danger, borderColor: theme.danger }}>
+                    <Icons.Trash /> Delete User
+                  </button>
+                )}
+                {isCurrentUser && <div />}
+                <button onClick={() => openEdit(viewUser)} style={btnAccent}>
+                  <Icons.Edit /> Edit User
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Add/Edit User Modal */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editUser ? "Edit User" : "Add User"}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Name" required>
+            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="Employee name" />
+          </FormField>
+          <FormField label="4-Digit PIN" required hint={editUser ? "Change the PIN or keep existing" : "Create a memorable 4-digit PIN"}>
+            <input 
+              value={form.pin} 
+              onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })} 
+              style={{ ...inputStyle, fontFamily: "'JetBrains Mono', monospace", fontSize: "18px", letterSpacing: "8px", textAlign: "center" }} 
+              placeholder="••••" 
+              maxLength={4} 
+            />
+          </FormField>
+          <FormField label="Role">
+            <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={selectStyle}>
+              <option value="employee">Employee</option>
+              <option value="store_manager">Store Manager</option>
+              <option value="accountant">Accountant</option>
+              {user.role === "super_admin" && <option value="super_admin">Super Admin</option>}
+            </select>
+          </FormField>
+          <FormField label="Store">
+            <select value={form.store} onChange={e => setForm({ ...form, store: e.target.value })} style={selectStyle}>
+              {(form.role === "super_admin" || form.role === "accountant") && <option value="all">All Stores</option>}
+              {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FormField label="Avatar Style">
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {[
+                  { id: "boss", label: "Boss", Icon: Icons.AvatarBoss },
+                  { id: "admin", label: "Admin", Icon: Icons.AvatarAdmin },
+                  { id: "employee", label: "Employee", Icon: Icons.AvatarEmployee },
+                  { id: "accountant", label: "Accountant", Icon: Icons.AvatarAccountant },
+                ].map(av => (
+                  <button key={av.id} type="button" onClick={() => setForm({ ...form, avatar: av.id })}
+                    style={{
+                      width: "70px", height: "70px", borderRadius: "14px", 
+                      border: `2px solid ${form.avatar === av.id ? theme.accent : theme.border}`,
+                      background: form.avatar === av.id ? `${theme.accent}15` : "white", 
+                      cursor: "pointer", display: "flex", flexDirection: "column", 
+                      alignItems: "center", justifyContent: "center", gap: "6px",
+                      color: form.avatar === av.id ? theme.primary : theme.textMuted,
+                      transition: "all 0.2s",
+                    }}>
+                    <av.Icon />
+                    <span style={{ fontSize: "10px", fontWeight: 500 }}>{av.label}</span>
+                  </button>
+                ))}
+              </div>
+            </FormField>
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveUser} style={btnAccent}><Icons.Check /> {editUser ? "Update" : "Add"} User</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== CUSTOMERS PAGE ====================
+function CustomersPage({ data, setData, user }) {
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editCustomer, setEditCustomer] = useState(null);
+  const [viewCustomer, setViewCustomer] = useState(null);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", type: "individual", notes: "" });
+
+  const filtered = data.customers.filter(c =>
+    !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openAdd = () => {
+    setEditCustomer(null);
+    setForm({ name: "", email: "", phone: "", address: "", type: "individual", notes: "" });
+    setShowModal(true);
+  };
+
+  const openEdit = (c) => {
+    setEditCustomer(c);
+    setForm({ name: c.name, email: c.email, phone: c.phone, address: c.address, type: c.type, notes: c.notes });
+    setShowModal(true);
+  };
+
+  const saveCustomer = () => {
+    if (!form.name) return;
+    if (editCustomer) {
+      setData(prev => ({
+        ...prev,
+        customers: prev.customers.map(c => c.id === editCustomer.id ? { ...c, ...form } : c),
+      }));
+    } else {
+      setData(prev => ({
+        ...prev,
+        customers: [...prev.customers, { id: genId("c"), ...form, totalSpent: 0 }],
+      }));
+    }
+    setShowModal(false);
+  };
+
+  const deleteCustomer = (id) => {
+    if (confirm("Delete this customer?")) {
+      setData(prev => ({ ...prev, customers: prev.customers.filter(c => c.id !== id) }));
+    }
+  };
+
+  const getCustomerInvoices = (customerId) => {
+    return data.invoices.filter(inv => inv.customerId === customerId || inv.client === data.customers.find(c => c.id === customerId)?.name);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Customers</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>{data.customers.length} customers</p>
+        </div>
+        <button onClick={openAdd} style={btnAccent}><Icons.Plus /> Add Customer</button>
+      </div>
+
+      <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
+        <div style={{ position: "relative", flex: 1, maxWidth: "300px" }}>
+          <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: theme.textMuted }}><Icons.Search /></span>
+          <input placeholder="Search customers..." value={search} onChange={e => setSearch(e.target.value)}
+            style={{ ...inputStyle, paddingLeft: "38px" }} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
+        {filtered.map(c => (
+          <div key={c.id} style={{
+            background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, padding: "20px",
+            cursor: "pointer", transition: "all 0.2s",
+          }}
+          onClick={() => setViewCustomer(c)}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{
+                  width: "44px", height: "44px", borderRadius: "12px",
+                  background: c.type === "business" ? `${theme.primary}15` : `${theme.secondary}15`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: c.type === "business" ? theme.primary : theme.secondary,
+                }}>
+                  {c.type === "business" ? <Icons.Building /> : <Icons.User />}
+                </div>
+                <div>
+                  <div style={{ fontSize: "15px", fontWeight: 600, color: theme.textPrimary }}>{c.name}</div>
+                  <span style={{
+                    fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "10px",
+                    background: c.type === "business" ? `${theme.primary}12` : `${theme.secondary}12`,
+                    color: c.type === "business" ? theme.primary : theme.secondary,
+                    textTransform: "uppercase",
+                  }}>{c.type}</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "4px" }} onClick={e => e.stopPropagation()}>
+                <button onClick={() => openEdit(c)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                  onMouseEnter={e => e.currentTarget.style.color = theme.primary}
+                  onMouseLeave={e => e.currentTarget.style.color = theme.textMuted}><Icons.Edit /></button>
+                <button onClick={() => deleteCustomer(c.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                  onMouseEnter={e => e.currentTarget.style.color = theme.danger}
+                  onMouseLeave={e => e.currentTarget.style.color = theme.textMuted}><Icons.Trash /></button>
+              </div>
+            </div>
+            <div style={{ fontSize: "13px", color: theme.textSecondary, marginBottom: "4px" }}>{c.email}</div>
+            <div style={{ fontSize: "13px", color: theme.textMuted, marginBottom: "12px" }}>{c.phone}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "12px", borderTop: `1px solid ${theme.border}` }}>
+              <span style={{ fontSize: "12px", color: theme.textMuted }}>{getCustomerInvoices(c.id).length} invoices</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: theme.success, fontFamily: "'JetBrains Mono', monospace" }}>
+                {formatCurrency(c.totalSpent || 0)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <div style={{ background: "white", borderRadius: "14px", padding: "60px", textAlign: "center", border: `1px solid ${theme.border}` }}>
+          <p style={{ fontSize: "40px", marginBottom: "12px" }}>👥</p>
+          <p style={{ fontSize: "16px", fontWeight: 600, color: theme.textPrimary, marginBottom: "4px" }}>No customers found</p>
+          <p style={{ fontSize: "14px", color: theme.textMuted }}>Add your first customer to get started</p>
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editCustomer ? "Edit Customer" : "Add Customer"}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Customer Name" required>
+            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="e.g. Blue Bay Resort" />
+          </FormField>
+          <FormField label="Type">
+            <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} style={selectStyle}>
+              <option value="individual">Individual</option>
+              <option value="business">Business</option>
+            </select>
+          </FormField>
+          <FormField label="Email">
+            <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={inputStyle} placeholder="email@example.com" />
+          </FormField>
+          <FormField label="Phone">
+            <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} style={inputStyle} placeholder="+230 5XXX XXXX" />
+          </FormField>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FormField label="Address">
+              <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} style={inputStyle} placeholder="Full address" />
+            </FormField>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FormField label="Notes">
+              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ ...inputStyle, minHeight: "80px", resize: "vertical" }} placeholder="Any special notes..." />
+            </FormField>
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveCustomer} style={btnAccent}><Icons.Check /> {editCustomer ? "Update" : "Add"} Customer</button>
+        </div>
+      </Modal>
+
+      {/* View Customer Modal */}
+      <Modal open={!!viewCustomer} onClose={() => setViewCustomer(null)} title={viewCustomer?.name || "Customer Details"} width="700px">
+        {viewCustomer && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px" }}>
+              <div style={{ background: "#F8F9FD", borderRadius: "12px", padding: "16px" }}>
+                <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Contact</div>
+                <div style={{ fontSize: "14px", color: theme.textPrimary }}>{viewCustomer.email}</div>
+                <div style={{ fontSize: "14px", color: theme.textSecondary }}>{viewCustomer.phone}</div>
+              </div>
+              <div style={{ background: "#F8F9FD", borderRadius: "12px", padding: "16px" }}>
+                <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Total Spent</div>
+                <div style={{ fontSize: "22px", fontWeight: 700, color: theme.success, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {formatCurrency(viewCustomer.totalSpent || 0)}
+                </div>
+              </div>
+            </div>
+            {viewCustomer.notes && (
+              <div style={{ marginBottom: "24px", padding: "12px 16px", background: `${theme.accent}10`, borderRadius: "10px", fontSize: "13px", color: theme.textSecondary }}>
+                <strong>Notes:</strong> {viewCustomer.notes}
+              </div>
+            )}
+            <h4 style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary, marginBottom: "12px" }}>Invoice History</h4>
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: "10px", overflow: "hidden" }}>
+              {getCustomerInvoices(viewCustomer.id).length === 0 ? (
+                <div style={{ padding: "24px", textAlign: "center", color: theme.textMuted }}>No invoices yet</div>
+              ) : (
+                getCustomerInvoices(viewCustomer.id).map(inv => (
+                  <div key={inv.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${theme.border}` }}>
+                    <div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: theme.primary }}>{inv.id}</div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted }}>{formatDate(inv.date)}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>
+                        {formatCurrency(inv.items.reduce((s, it) => s + it.qty * it.price, 0) * (inv.vat ? 1.15 : 1))}
+                      </div>
+                      <span style={{
+                        fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "10px",
+                        background: inv.status === "paid" ? "#E8F6F3" : inv.status === "pending" ? "#FEF9E7" : "#FDE8EA",
+                        color: inv.status === "paid" ? theme.success : inv.status === "pending" ? "#D4A843" : theme.danger,
+                      }}>{inv.status}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== QUOTES PAGE ====================
+function QuotesPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [viewQuote, setViewQuote] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [form, setForm] = useState({
+    customer: "", customerId: "", items: [{ productId: "", qty: 1, price: 0 }],
+    validUntil: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store, notes: ""
+  });
+
+  const storeFilter = user.store === "all" ? null : user.store;
+  const quotes = data.quotes.filter(q => (!storeFilter || q.store === storeFilter) && (filter === "all" || q.status === filter));
+
+  const addItem = () => setForm({ ...form, items: [...form.items, { productId: "", qty: 1, price: 0 }] });
+  const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
+  const updateItem = (idx, field, value) => {
+    const items = [...form.items];
+    items[idx] = { ...items[idx], [field]: value };
+    if (field === "productId") {
+      const prod = data.products.find(p => p.id === value);
+      if (prod) items[idx].price = prod.price;
+    }
+    setForm({ ...form, items });
+  };
+
+  const getSubtotal = (items) => items.reduce((s, it) => s + (it.qty * it.price), 0);
+  const getVAT = (items, vat) => vat ? getSubtotal(items) * VAT_RATE : 0;
+  const getTotal = (items, vat) => getSubtotal(items) + getVAT(items, vat);
+
+  const saveQuote = () => {
+    if (!form.customer || form.items.length === 0) return;
+    const quote = {
+      id: `QUO-${String(data.quotes.length + 1).padStart(3, "0")}`,
+      ...form,
+      date: new Date().toISOString().split("T")[0],
+      status: "pending",
+      items: form.items.filter(it => it.productId && it.qty > 0),
+    };
+    setData(prev => ({ ...prev, quotes: [...prev.quotes, quote] }));
+    setShowModal(false);
+  };
+
+  const updateStatus = (id, status) => {
+    setData(prev => ({ ...prev, quotes: prev.quotes.map(q => q.id === id ? { ...q, status } : q) }));
+  };
+
+  const convertToInvoice = (quote) => {
+    const newInvoice = {
+      id: `INV-${String(data.invoices.length + 1).padStart(3, "0")}`,
+      client: quote.customer,
+      customerId: quote.customerId,
+      items: quote.items,
+      date: new Date().toISOString().split("T")[0],
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      status: "pending",
+      store: quote.store,
+      currency: quote.currency,
+      lang: quote.lang,
+      vat: quote.vat,
+      notes: `Converted from ${quote.id}`,
+    };
+    setData(prev => ({
+      ...prev,
+      invoices: [...prev.invoices, newInvoice],
+      quotes: prev.quotes.map(q => q.id === quote.id ? { ...q, status: "accepted" } : q),
+    }));
+    alert(`Invoice ${newInvoice.id} created!`);
+  };
+
+  const statusColors = {
+    pending: { bg: "#FEF9E7", color: "#D4A843" },
+    accepted: { bg: "#E8F6F3", color: theme.success },
+    declined: { bg: "#FDE8EA", color: theme.danger },
+    expired: { bg: "#F0F0F5", color: theme.textMuted },
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Quotes</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>{quotes.length} quotes</p>
+        </div>
+        <button onClick={() => {
+          setForm({ customer: "", customerId: "", items: [{ productId: "", qty: 1, price: 0 }], validUntil: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store, notes: "" });
+          setShowModal(true);
+        }} style={btnAccent}><Icons.Plus /> New Quote</button>
+      </div>
+
+      {/* Filter Tabs */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+        {[{ id: "all", label: "All" }, { id: "pending", label: "Pending" }, { id: "accepted", label: "Accepted" }, { id: "expired", label: "Expired" }].map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            style={{
+              ...btnSecondary, padding: "8px 16px",
+              background: filter === f.id ? theme.primary : "white",
+              color: filter === f.id ? "white" : theme.textSecondary,
+              borderColor: filter === f.id ? theme.primary : theme.border,
+            }}>{f.label}</button>
+        ))}
+      </div>
+
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }}>
+          <thead>
+            <tr style={{ background: "#F8F9FD" }}>
+              <th style={{ padding: "14px 20px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Quote</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Customer</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Date</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Valid Until</th>
+              <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Amount</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Status</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px" }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quotes.map(q => {
+              const total = getTotal(q.items, q.vat);
+              const sc = statusColors[q.status] || statusColors.pending;
+              const isExpired = new Date(q.validUntil) < new Date() && q.status === "pending";
+              return (
+                <tr key={q.id} style={{ borderTop: `1px solid ${theme.border}` }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#FAFBFF"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <td style={{ padding: "14px 20px", fontWeight: 600, color: theme.primary, fontFamily: "'JetBrains Mono', monospace", fontSize: "13px" }}>{q.id}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 500, color: theme.textPrimary }}>{q.customer}</td>
+                  <td style={{ padding: "14px 16px", color: theme.textSecondary }}>{formatDate(q.date)}</td>
+                  <td style={{ padding: "14px 16px", color: isExpired ? theme.danger : theme.textSecondary }}>{formatDate(q.validUntil)}</td>
+                  <td style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(total, q.currency)}</td>
+                  <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", background: isExpired ? statusColors.expired.bg : sc.bg, color: isExpired ? statusColors.expired.color : sc.color }}>
+                      {isExpired ? "Expired" : q.status.charAt(0).toUpperCase() + q.status.slice(1)}
+                    </span>
+                  </td>
+                  <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                    <div style={{ display: "flex", justifyContent: "center", gap: "4px" }}>
+                      <button onClick={() => setViewQuote(q)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }} title="View">
+                        <Icons.Eye />
+                      </button>
+                      {q.status === "pending" && !isExpired && (
+                        <button onClick={() => convertToInvoice(q)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }} title="Convert to Invoice">
+                          <Icons.Check />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {quotes.length === 0 && (
+          <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>
+            <p style={{ fontSize: "40px", marginBottom: "8px" }}>📋</p>
+            <p style={{ fontSize: "15px", marginBottom: "4px" }}>No quotes found</p>
+          </div>
+        )}
+      </div>
+
+      {/* New Quote Modal */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="New Quote" width="700px">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Customer" required>
+            <select value={form.customerId} onChange={e => {
+              const cust = data.customers.find(c => c.id === e.target.value);
+              setForm({ ...form, customerId: e.target.value, customer: cust?.name || "" });
+            }} style={selectStyle}>
+              <option value="">Select customer...</option>
+              {data.customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Valid Until" required>
+            <input type="date" value={form.validUntil} onChange={e => setForm({ ...form, validUntil: e.target.value })} style={inputStyle} />
+          </FormField>
+        </div>
+
+        <div style={{ marginTop: "12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: theme.textPrimary }}>Line Items</label>
+            <button onClick={addItem} style={{ ...btnSecondary, padding: "6px 14px", fontSize: "12px" }}><Icons.Plus /> Add Item</button>
+          </div>
+          {form.items.map((item, idx) => (
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: "2fr 80px 120px 40px", gap: "8px", marginBottom: "8px", alignItems: "end" }}>
+              <select value={item.productId} onChange={e => updateItem(idx, "productId", e.target.value)} style={selectStyle}>
+                <option value="">Select product...</option>
+                {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <input type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={inputStyle} min="1" placeholder="Qty" />
+              <input type="number" value={item.price} onChange={e => updateItem(idx, "price", Number(e.target.value))} style={inputStyle} placeholder="Price" />
+              {form.items.length > 1 && (
+                <button onClick={() => removeItem(idx)} style={{ background: "none", border: "none", cursor: "pointer", padding: "8px", color: theme.danger }}>
+                  <Icons.Trash />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "16px 0" }}>
+          <input type="checkbox" checked={form.vat} onChange={e => setForm({ ...form, vat: e.target.checked })} id="vat-toggle" />
+          <label htmlFor="vat-toggle" style={{ fontSize: "13px", color: theme.textSecondary }}>Apply 15% VAT</label>
+        </div>
+
+        <div style={{ background: "#F8F9FD", borderRadius: "10px", padding: "16px 20px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+            <span style={{ fontSize: "13px", color: theme.textSecondary }}>Subtotal</span>
+            <span style={{ fontSize: "14px", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getSubtotal(form.items))}</span>
+          </div>
+          {form.vat && (
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+              <span style={{ fontSize: "13px", color: theme.textSecondary }}>VAT (15%)</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getVAT(form.items, form.vat))}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${theme.border}`, paddingTop: "8px" }}>
+            <span style={{ fontSize: "15px", fontWeight: 700, color: theme.textPrimary }}>Total</span>
+            <span style={{ fontSize: "18px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getTotal(form.items, form.vat))}</span>
+          </div>
+        </div>
+
+        <FormField label="Notes">
+          <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ ...inputStyle, minHeight: "60px" }} placeholder="Any additional notes..." />
+        </FormField>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveQuote} style={btnAccent}><Icons.Check /> Create Quote</button>
+        </div>
+      </Modal>
+
+      {/* View Quote Modal */}
+      <Modal open={!!viewQuote} onClose={() => setViewQuote(null)} title={viewQuote ? `Quote ${viewQuote.id}` : ""} width="640px">
+        {viewQuote && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+              <div>
+                <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Customer</div>
+                <div style={{ fontSize: "15px", fontWeight: 600, color: theme.textPrimary }}>{viewQuote.customer}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Valid Until</div>
+                <div style={{ fontSize: "15px", fontWeight: 600, color: new Date(viewQuote.validUntil) < new Date() ? theme.danger : theme.textPrimary }}>{formatDate(viewQuote.validUntil)}</div>
+              </div>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", marginBottom: "20px" }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${theme.primary}` }}>
+                  <th style={{ padding: "10px 0", textAlign: "left", color: theme.primary }}>Item</th>
+                  <th style={{ padding: "10px 0", textAlign: "center", color: theme.primary }}>Qty</th>
+                  <th style={{ padding: "10px 0", textAlign: "right", color: theme.primary }}>Price</th>
+                  <th style={{ padding: "10px 0", textAlign: "right", color: theme.primary }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {viewQuote.items.map((it, i) => {
+                  const prod = data.products.find(p => p.id === it.productId);
+                  return (
+                    <tr key={i} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                      <td style={{ padding: "10px 0" }}>{prod?.name || "—"}</td>
+                      <td style={{ padding: "10px 0", textAlign: "center" }}>{it.qty}</td>
+                      <td style={{ padding: "10px 0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(it.price)}</td>
+                      <td style={{ padding: "10px 0", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(it.qty * it.price)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ width: "200px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "13px", color: theme.textSecondary }}>Subtotal</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getSubtotal(viewQuote.items))}</span>
+                </div>
+                {viewQuote.vat && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "13px", color: theme.textSecondary }}>VAT (15%)</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getVAT(viewQuote.items, true))}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", borderTop: `2px solid ${theme.primary}`, paddingTop: "8px" }}>
+                  <span style={{ fontWeight: 700 }}>Total</span>
+                  <span style={{ fontSize: "17px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(getTotal(viewQuote.items, viewQuote.vat))}</span>
+                </div>
+              </div>
+            </div>
+            {viewQuote.status === "pending" && new Date(viewQuote.validUntil) >= new Date() && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+                <button onClick={() => { updateStatus(viewQuote.id, "declined"); setViewQuote(null); }} style={btnSecondary}>Decline</button>
+                <button onClick={() => { convertToInvoice(viewQuote); setViewQuote(null); }} style={btnAccent}><Icons.Check /> Convert to Invoice</button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== BILLS PAGE ====================
+function BillsPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [form, setForm] = useState({ supplier: "", supplierId: "", amount: "", date: "", dueDate: "", category: "Inventory", reference: "", notes: "" });
+
+  const bills = data.bills.filter(b => filter === "all" || b.status === filter);
+  const totalPending = bills.filter(b => b.status === "pending").reduce((s, b) => s + b.amount, 0);
+  const totalOverdue = bills.filter(b => b.status === "overdue").reduce((s, b) => s + b.amount, 0);
+
+  const saveBill = () => {
+    if (!form.supplier || !form.amount) return;
+    const bill = {
+      id: `BILL-${String(data.bills.length + 1).padStart(3, "0")}`,
+      ...form,
+      amount: Number(form.amount),
+      status: "pending",
+    };
+    setData(prev => ({ ...prev, bills: [...prev.bills, bill] }));
+    setShowModal(false);
+  };
+
+  const markPaid = (id) => {
+    setData(prev => ({
+      ...prev,
+      bills: prev.bills.map(b => b.id === id ? { ...b, status: "paid", paidDate: new Date().toISOString().split("T")[0] } : b),
+    }));
+  };
+
+  const statusColors = {
+    pending: { bg: "#FEF9E7", color: "#D4A843" },
+    paid: { bg: "#E8F6F3", color: theme.success },
+    overdue: { bg: "#FDE8EA", color: theme.danger },
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Bills & Payments</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>Track supplier bills and payments</p>
+        </div>
+        <button onClick={() => {
+          setForm({ supplier: "", supplierId: "", amount: "", date: new Date().toISOString().split("T")[0], dueDate: "", category: "Inventory", reference: "", notes: "" });
+          setShowModal(true);
+        }} style={btnAccent}><Icons.Plus /> Add Bill</button>
+      </div>
+
+      {/* Summary Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
+        <StatCard title="Pending Bills" value={formatCurrency(totalPending)} subtitle={`${bills.filter(b => b.status === "pending").length} bills`} icon={Icons.Bill} color={theme.warning} />
+        <StatCard title="Overdue" value={formatCurrency(totalOverdue)} subtitle={`${bills.filter(b => b.status === "overdue").length} bills`} icon={Icons.Bill} color={theme.danger} />
+        <StatCard title="Paid This Month" value={formatCurrency(bills.filter(b => b.status === "paid").reduce((s, b) => s + b.amount, 0))} subtitle={`${bills.filter(b => b.status === "paid").length} bills`} icon={Icons.Bill} color={theme.success} />
+      </div>
+
+      {/* Filter Tabs */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+        {[{ id: "all", label: "All" }, { id: "pending", label: "Pending" }, { id: "overdue", label: "Overdue" }, { id: "paid", label: "Paid" }].map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            style={{
+              ...btnSecondary, padding: "8px 16px",
+              background: filter === f.id ? theme.primary : "white",
+              color: filter === f.id ? "white" : theme.textSecondary,
+              borderColor: filter === f.id ? theme.primary : theme.border,
+            }}>{f.label}</button>
+        ))}
+      </div>
+
+      <div style={{ background: "white", borderRadius: "14px", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }}>
+          <thead>
+            <tr style={{ background: "#F8F9FD" }}>
+              <th style={{ padding: "14px 20px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Bill</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Supplier</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Category</th>
+              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Due Date</th>
+              <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Amount</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>Status</th>
+              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: theme.textSecondary, fontSize: "12px" }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bills.map(b => {
+              const sc = statusColors[b.status] || statusColors.pending;
+              const isOverdue = new Date(b.dueDate) < new Date() && b.status === "pending";
+              return (
+                <tr key={b.id} style={{ borderTop: `1px solid ${theme.border}` }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#FAFBFF"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <td style={{ padding: "14px 20px" }}>
+                    <div style={{ fontWeight: 600, color: theme.primary, fontFamily: "'JetBrains Mono', monospace", fontSize: "13px" }}>{b.id}</div>
+                    {b.reference && <div style={{ fontSize: "11px", color: theme.textMuted }}>Ref: {b.reference}</div>}
+                  </td>
+                  <td style={{ padding: "14px 16px", fontWeight: 500, color: theme.textPrimary }}>{b.supplier}</td>
+                  <td style={{ padding: "14px 16px" }}>
+                    <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "20px", background: `${theme.secondary}12`, color: theme.secondary, fontWeight: 500 }}>{b.category}</span>
+                  </td>
+                  <td style={{ padding: "14px 16px", color: isOverdue ? theme.danger : theme.textSecondary, fontWeight: isOverdue ? 600 : 400 }}>{formatDate(b.dueDate)}</td>
+                  <td style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", color: theme.danger }}>{formatCurrency(b.amount)}</td>
+                  <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", background: isOverdue && b.status === "pending" ? statusColors.overdue.bg : sc.bg, color: isOverdue && b.status === "pending" ? statusColors.overdue.color : sc.color }}>
+                      {isOverdue && b.status === "pending" ? "Overdue" : b.status.charAt(0).toUpperCase() + b.status.slice(1)}
+                    </span>
+                  </td>
+                  <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                    {b.status !== "paid" && (
+                      <button onClick={() => markPaid(b.id)} style={{ ...btnSecondary, padding: "6px 12px", fontSize: "12px" }}>
+                        <Icons.Check /> Mark Paid
+                      </button>
+                    )}
+                    {b.status === "paid" && <span style={{ fontSize: "12px", color: theme.textMuted }}>Paid {formatDate(b.paidDate)}</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {bills.length === 0 && (
+          <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>
+            <p style={{ fontSize: "40px", marginBottom: "8px" }}>💳</p>
+            <p style={{ fontSize: "15px" }}>No bills found</p>
+          </div>
+        )}
+      </div>
+
+      {/* Add Bill Modal */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Add Bill">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Supplier" required>
+            <select value={form.supplierId} onChange={e => {
+              const sup = data.suppliers.find(s => s.id === e.target.value);
+              setForm({ ...form, supplierId: e.target.value, supplier: sup?.name || "" });
+            }} style={selectStyle}>
+              <option value="">Select supplier...</option>
+              {data.suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Amount (MUR)" required>
+            <input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} style={inputStyle} placeholder="0.00" />
+          </FormField>
+          <FormField label="Bill Date">
+            <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} />
+          </FormField>
+          <FormField label="Due Date" required>
+            <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} style={inputStyle} />
+          </FormField>
+          <FormField label="Category">
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={selectStyle}>
+              <option value="Inventory">Inventory</option>
+              <option value="Shipping">Shipping</option>
+              <option value="Services">Services</option>
+              <option value="Equipment">Equipment</option>
+              <option value="Other">Other</option>
+            </select>
+          </FormField>
+          <FormField label="Reference #">
+            <input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} style={inputStyle} placeholder="Supplier invoice #" />
+          </FormField>
+        </div>
+        <FormField label="Notes">
+          <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ ...inputStyle, minHeight: "60px" }} placeholder="Description..." />
+        </FormField>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveBill} style={btnAccent}><Icons.Check /> Add Bill</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== BUDGETS PAGE ====================
+function BudgetsPage({ data, setData, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [editBudget, setEditBudget] = useState(null);
+  const [viewBudget, setViewBudget] = useState(null);
+  const [form, setForm] = useState({ name: "", amount: "", category: "Rent", period: "monthly", store: "all" });
+
+  const openAdd = () => {
+    setEditBudget(null);
+    setForm({ name: "", amount: "", category: "Rent", period: "monthly", store: "all" });
+    setShowModal(true);
+  };
+
+  const openEdit = (budget) => {
+    setEditBudget(budget);
+    setForm({ name: budget.name, amount: budget.amount, category: budget.category, period: budget.period, store: budget.store });
+    setShowModal(true);
+    setViewBudget(null);
+  };
+
+  const saveBudget = () => {
+    if (!form.name || !form.amount) return;
+    if (editBudget) {
+      setData(prev => ({
+        ...prev,
+        budgets: prev.budgets.map(b => b.id === editBudget.id ? { ...b, ...form, amount: Number(form.amount) } : b),
+      }));
+    } else {
+      setData(prev => ({
+        ...prev,
+        budgets: [...prev.budgets, { id: genId("b"), ...form, amount: Number(form.amount), spent: 0 }],
+      }));
+    }
+    setShowModal(false);
+  };
+
+  const deleteBudget = (id) => {
+    if (confirm("Delete this budget?")) {
+      setData(prev => ({ ...prev, budgets: prev.budgets.filter(b => b.id !== id) }));
+      setViewBudget(null);
+    }
+  };
+
+  // Calculate actual spent from expenses for a budget
+  const getExpensesForBudget = (budget) => {
+    return data.expenses.filter(e => 
+      e.category === budget.category && 
+      (budget.store === "all" || e.store === budget.store)
+    );
+  };
+
+  const getSpentForBudget = (budget) => {
+    return getExpensesForBudget(budget).reduce((sum, e) => sum + e.amount, 0);
+  };
+
+  // Monthly breakdown for chart
+  const getMonthlyBreakdown = (budget) => {
+    const expenses = getExpensesForBudget(budget);
+    const months = {};
+    expenses.forEach(e => {
+      const month = e.date.substring(0, 7); // YYYY-MM
+      months[month] = (months[month] || 0) + e.amount;
+    });
+    return Object.entries(months).map(([month, amount]) => ({ month, amount })).slice(-6);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Budgets</h1>
+          <p style={{ fontSize: "14px", color: theme.textSecondary }}>Set and track spending limits</p>
+        </div>
+        <button onClick={openAdd} style={btnAccent}><Icons.Plus /> Create Budget</button>
+      </div>
+
+      {/* Summary Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
+        <StatCard 
+          title="Total Budgeted" 
+          value={formatCurrency(data.budgets.reduce((s, b) => s + b.amount, 0))} 
+          subtitle={`${data.budgets.length} active budgets`}
+          icon={Icons.Budget} 
+          color={theme.primary} 
+        />
+        <StatCard 
+          title="Total Spent" 
+          value={formatCurrency(data.budgets.reduce((s, b) => s + (b.spent || getSpentForBudget(b)), 0))} 
+          subtitle="Across all budgets"
+          icon={Icons.Expense} 
+          color={theme.secondary} 
+        />
+        <StatCard 
+          title="Over Budget" 
+          value={data.budgets.filter(b => (b.spent || getSpentForBudget(b)) > b.amount).length} 
+          subtitle="Budgets exceeded"
+          icon={Icons.Report} 
+          color={theme.danger} 
+        />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "20px" }}>
+        {data.budgets.map(b => {
+          const spent = b.spent || getSpentForBudget(b);
+          const percentage = Math.min((spent / b.amount) * 100, 100);
+          const isOverBudget = spent > b.amount;
+          const remaining = b.amount - spent;
+          
+          return (
+            <div key={b.id} 
+              onClick={() => setViewBudget(b)}
+              style={{
+                background: "white", borderRadius: "16px", border: `1px solid ${theme.border}`, padding: "24px",
+                position: "relative", overflow: "hidden", cursor: "pointer", transition: "all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
+            >
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: isOverBudget ? theme.danger : percentage > 80 ? theme.warning : theme.success }} />
+              
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+                <div>
+                  <div style={{ fontSize: "16px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>{b.name}</div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "10px", background: `${theme.secondary}12`, color: theme.secondary, fontWeight: 500 }}>{b.category}</span>
+                    <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "10px", background: "#F0F0F5", color: theme.textMuted, fontWeight: 500 }}>{b.period}</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: "12px", color: theme.textMuted }}>Click to view</div>
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "13px", color: theme.textSecondary }}>Spent</span>
+                  <span style={{ fontSize: "15px", fontWeight: 700, color: isOverBudget ? theme.danger : theme.textPrimary, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {formatCurrency(spent)}
+                  </span>
+                </div>
+                <div style={{ height: "8px", background: "#F0F0F5", borderRadius: "4px", overflow: "hidden" }}>
+                  <div style={{
+                    width: `${Math.min(percentage, 100)}%`,
+                    height: "100%",
+                    background: isOverBudget ? theme.danger : percentage > 80 ? theme.warning : theme.success,
+                    borderRadius: "4px",
+                    transition: "width 0.5s ease",
+                  }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
+                  <span style={{ fontSize: "12px", color: theme.textMuted }}>{percentage.toFixed(0)}% used</span>
+                  <span style={{ fontSize: "12px", color: theme.textMuted }}>Budget: {formatCurrency(b.amount)}</span>
+                </div>
+              </div>
+
+              <div style={{
+                padding: "12px", borderRadius: "10px", marginTop: "12px",
+                background: isOverBudget ? `${theme.danger}10` : `${theme.success}10`,
+              }}>
+                <div style={{ fontSize: "12px", color: isOverBudget ? theme.danger : theme.success, fontWeight: 500 }}>
+                  {isOverBudget ? "Over budget by" : "Remaining"}
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: 700, color: isOverBudget ? theme.danger : theme.success, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {formatCurrency(Math.abs(remaining))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {data.budgets.length === 0 && (
+        <div style={{ background: "white", borderRadius: "14px", padding: "60px", textAlign: "center", border: `1px solid ${theme.border}` }}>
+          <p style={{ fontSize: "40px", marginBottom: "12px" }}>📊</p>
+          <p style={{ fontSize: "16px", fontWeight: 600, color: theme.textPrimary, marginBottom: "4px" }}>No budgets yet</p>
+          <p style={{ fontSize: "14px", color: theme.textMuted, marginBottom: "16px" }}>Create budgets to track your spending</p>
+          <button onClick={openAdd} style={btnAccent}><Icons.Plus /> Create Budget</button>
+        </div>
+      )}
+
+      {/* View Budget Detail Modal */}
+      <Modal open={!!viewBudget} onClose={() => setViewBudget(null)} title={viewBudget?.name || "Budget Details"} width="700px">
+        {viewBudget && (() => {
+          const spent = viewBudget.spent || getSpentForBudget(viewBudget);
+          const percentage = (spent / viewBudget.amount) * 100;
+          const isOverBudget = spent > viewBudget.amount;
+          const remaining = viewBudget.amount - spent;
+          const expenses = getExpensesForBudget(viewBudget);
+          const monthlyData = getMonthlyBreakdown(viewBudget);
+          const maxMonthly = Math.max(...monthlyData.map(m => m.amount), 1);
+
+          return (
+            <div>
+              {/* Budget Info Header */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "24px" }}>
+                <div style={{ background: "#F8F9FD", borderRadius: "12px", padding: "16px", textAlign: "center" }}>
+                  <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Budget</div>
+                  <div style={{ fontSize: "22px", fontWeight: 700, color: theme.primary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(viewBudget.amount)}</div>
+                </div>
+                <div style={{ background: "#F8F9FD", borderRadius: "12px", padding: "16px", textAlign: "center" }}>
+                  <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "4px" }}>Spent</div>
+                  <div style={{ fontSize: "22px", fontWeight: 700, color: isOverBudget ? theme.danger : theme.textPrimary, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(spent)}</div>
+                </div>
+                <div style={{ background: isOverBudget ? `${theme.danger}10` : `${theme.success}10`, borderRadius: "12px", padding: "16px", textAlign: "center" }}>
+                  <div style={{ fontSize: "12px", color: isOverBudget ? theme.danger : theme.success, marginBottom: "4px" }}>{isOverBudget ? "Over Budget" : "Remaining"}</div>
+                  <div style={{ fontSize: "22px", fontWeight: 700, color: isOverBudget ? theme.danger : theme.success, fontFamily: "'JetBrains Mono', monospace" }}>{formatCurrency(Math.abs(remaining))}</div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div style={{ marginBottom: "24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: theme.textPrimary }}>Progress</span>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: isOverBudget ? theme.danger : theme.textSecondary }}>{percentage.toFixed(1)}%</span>
+                </div>
+                <div style={{ height: "12px", background: "#F0F0F5", borderRadius: "6px", overflow: "hidden" }}>
+                  <div style={{
+                    width: `${Math.min(percentage, 100)}%`,
+                    height: "100%",
+                    background: isOverBudget ? `linear-gradient(90deg, ${theme.danger}, #FF6B6B)` : percentage > 80 ? `linear-gradient(90deg, ${theme.warning}, #FFB347)` : `linear-gradient(90deg, ${theme.success}, #5DD39E)`,
+                    borderRadius: "6px",
+                  }} />
+                </div>
+              </div>
+
+              {/* Monthly Chart */}
+              {monthlyData.length > 0 && (
+                <div style={{ marginBottom: "24px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary, marginBottom: "12px" }}>Monthly Spending</h4>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "120px", padding: "0 8px" }}>
+                    {monthlyData.map((m, i) => (
+                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        <div style={{ fontSize: "10px", fontWeight: 600, color: theme.textSecondary, marginBottom: "4px" }}>{formatCurrency(m.amount).replace("Rs ", "")}</div>
+                        <div style={{
+                          width: "100%", maxWidth: "40px",
+                          height: `${(m.amount / maxMonthly) * 80}px`,
+                          minHeight: "4px",
+                          background: `linear-gradient(180deg, ${theme.primary}, ${theme.secondary})`,
+                          borderRadius: "4px 4px 0 0",
+                        }} />
+                        <div style={{ fontSize: "10px", color: theme.textMuted, marginTop: "4px" }}>{m.month.substring(5)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Budget Details */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "24px" }}>
+                <div style={{ padding: "12px 16px", background: "#F8F9FD", borderRadius: "10px" }}>
+                  <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "2px" }}>Category</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary }}>{viewBudget.category}</div>
+                </div>
+                <div style={{ padding: "12px 16px", background: "#F8F9FD", borderRadius: "10px" }}>
+                  <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "2px" }}>Period</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary, textTransform: "capitalize" }}>{viewBudget.period}</div>
+                </div>
+                <div style={{ padding: "12px 16px", background: "#F8F9FD", borderRadius: "10px" }}>
+                  <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "2px" }}>Store</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary }}>{viewBudget.store === "all" ? "All Stores" : STORES.find(s => s.id === viewBudget.store)?.name}</div>
+                </div>
+                <div style={{ padding: "12px 16px", background: "#F8F9FD", borderRadius: "10px" }}>
+                  <div style={{ fontSize: "11px", color: theme.textMuted, marginBottom: "2px" }}>Transactions</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary }}>{expenses.length} expenses</div>
+                </div>
+              </div>
+
+              {/* Recent Expenses */}
+              <div style={{ marginBottom: "20px" }}>
+                <h4 style={{ fontSize: "14px", fontWeight: 600, color: theme.textPrimary, marginBottom: "12px" }}>Recent Expenses in this Category</h4>
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: "10px", overflow: "hidden", maxHeight: "200px", overflowY: "auto" }}>
+                  {expenses.length === 0 ? (
+                    <div style={{ padding: "24px", textAlign: "center", color: theme.textMuted }}>No expenses recorded</div>
+                  ) : (
+                    expenses.slice(0, 10).map(e => (
+                      <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${theme.border}` }}>
+                        <div>
+                          <div style={{ fontSize: "13px", fontWeight: 500, color: theme.textPrimary }}>{e.description}</div>
+                          <div style={{ fontSize: "11px", color: theme.textMuted }}>{formatDate(e.date)} • {STORES.find(s => s.id === e.store)?.name}</div>
+                        </div>
+                        <div style={{ fontSize: "14px", fontWeight: 600, color: theme.danger, fontFamily: "'JetBrains Mono', monospace" }}>
+                          -{formatCurrency(e.amount)}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+                <button onClick={() => deleteBudget(viewBudget.id)} style={{ ...btnSecondary, color: theme.danger, borderColor: theme.danger }}>
+                  <Icons.Trash /> Delete Budget
+                </button>
+                <button onClick={() => openEdit(viewBudget)} style={btnAccent}>
+                  <Icons.Edit /> Edit Budget
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Create/Edit Budget Modal */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editBudget ? "Edit Budget" : "Create Budget"}>
+        <FormField label="Budget Name" required>
+          <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="e.g. Monthly Marketing" />
+        </FormField>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <FormField label="Budget Amount (MUR)" required>
+            <input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} style={inputStyle} placeholder="0.00" />
+          </FormField>
+          <FormField label="Category">
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={selectStyle}>
+              {["Rent", "Utilities", "Shipping", "Marketing", "Salaries", "Maintenance", "Insurance", "Inventory", "Other"].map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="Period">
+            <select value={form.period} onChange={e => setForm({ ...form, period: e.target.value })} style={selectStyle}>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </FormField>
+          <FormField label="Store">
+            <select value={form.store} onChange={e => setForm({ ...form, store: e.target.value })} style={selectStyle}>
+              <option value="all">All Stores</option>
+              {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "16px", borderTop: `1px solid ${theme.border}` }}>
+          <button onClick={() => setShowModal(false)} style={btnSecondary}>Cancel</button>
+          <button onClick={saveBudget} style={btnAccent}><Icons.Check /> {editBudget ? "Update" : "Create"} Budget</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==================== MAIN APP ====================
+export default function SealApp() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [data, setData] = useState(getDefaultState);
+  const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState("connecting"); // connecting, synced, saving, error
+  const saveTimeoutRef = useRef(null);
+  const lastSavedRef = useRef(null);
+
+  // Load data from Supabase on mount
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      setLoading(true);
+      const cloudData = await supabase.loadData();
+      if (cloudData && Object.keys(cloudData).length > 0) {
+        setData(cloudData);
+        lastSavedRef.current = JSON.stringify(cloudData);
+      } else {
+        // First time: save default data to cloud
+        const defaultData = getDefaultState();
+        await supabase.saveData(defaultData);
+        lastSavedRef.current = JSON.stringify(defaultData);
+      }
+      setLoading(false);
+      setSyncStatus("synced");
+    };
+    loadFromSupabase();
+    
+    // Subscribe to real-time updates
+    const unsubscribe = supabase.subscribe((newData) => {
+      const newDataStr = JSON.stringify(newData);
+      if (newDataStr !== lastSavedRef.current) {
+        setData(newData);
+        lastSavedRef.current = newDataStr;
+        setSyncStatus("synced");
+      }
+    });
+    
+    return () => unsubscribe();
+  }, []);
+
+  // Save to Supabase when data changes (debounced)
+  useEffect(() => {
+    if (loading) return;
+    
+    const dataStr = JSON.stringify(data);
+    if (dataStr === lastSavedRef.current) return;
+    
+    setSyncStatus("saving");
+    
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    saveTimeoutRef.current = setTimeout(async () => {
+      const success = await supabase.saveData(data);
+      if (success) {
+        lastSavedRef.current = dataStr;
+        setSyncStatus("synced");
+      } else {
+        setSyncStatus("error");
+      }
+    }, 500); // Debounce 500ms
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [data, loading]);
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div style={{ 
+        minHeight: "100vh", 
+        background: theme.bg, 
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center",
+        flexDirection: "column",
+        gap: "16px",
+        fontFamily: "'Outfit', sans-serif"
+      }}>
+        <div style={{ fontSize: "48px" }}>🦭</div>
+        <div style={{ fontSize: "18px", fontWeight: 600, color: theme.textPrimary }}>Loading SEAL...</div>
+        <div style={{ 
+          width: "200px", 
+          height: "4px", 
+          background: theme.border, 
+          borderRadius: "2px",
+          overflow: "hidden"
+        }}>
+          <div style={{
+            width: "50%",
+            height: "100%",
+            background: theme.accent,
+            borderRadius: "2px",
+            animation: "loading 1s ease-in-out infinite",
+          }} />
+        </div>
+        <style>{`
+          @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(300%); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginScreen users={data.users} onLogin={(user) => { setCurrentUser(user); setCurrentPage("dashboard"); }} />;
+  }
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case "dashboard": return <DashboardPage data={data} user={currentUser} setCurrentPage={setCurrentPage} setData={setData} />;
+      case "customers": return <CustomersPage data={data} setData={setData} user={currentUser} />;
+      case "inventory": return <InventoryPage data={data} setData={setData} user={currentUser} />;
+      case "invoices": return <InvoicesPage data={data} setData={setData} user={currentUser} />;
+      case "quotes": return <QuotesPage data={data} setData={setData} user={currentUser} />;
+      case "bills": return <BillsPage data={data} setData={setData} user={currentUser} />;
+      case "expenses": return <ExpensesPage data={data} setData={setData} user={currentUser} />;
+      case "transfers": return <TransfersPage data={data} setData={setData} user={currentUser} />;
+      case "time": return <TimeTrackingPage data={data} setData={setData} user={currentUser} />;
+      case "reports": return <ReportsPage data={data} user={currentUser} />;
+      case "budgets": return <BudgetsPage data={data} setData={setData} user={currentUser} />;
+      case "users": return <UsersPage data={data} setData={setData} user={currentUser} />;
+      case "settings": return <SettingsPage data={data} setData={setData} user={currentUser} />;
+      default: return <DashboardPage data={data} user={currentUser} />;
+    }
+  };
+
+  // Sync status indicator
+  const SyncIndicator = () => {
+    const statusConfig = {
+      connecting: { color: theme.warning, text: "Connecting...", icon: "◌" },
+      synced: { color: theme.success, text: "Synced", icon: "✓" },
+      saving: { color: theme.accent, text: "Saving...", icon: "↑" },
+      error: { color: theme.danger, text: "Sync error", icon: "!" },
+    };
+    const status = statusConfig[syncStatus] || statusConfig.synced;
+    
+    return (
+      <div style={{ 
+        display: "flex", 
+        alignItems: "center", 
+        gap: "6px",
+        padding: "4px 10px",
+        background: `${status.color}15`,
+        borderRadius: "12px",
+        fontSize: "12px",
+        color: status.color,
+        fontWeight: 500,
+      }}>
+        <span>{status.icon}</span>
+        <span>{status.text}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: theme.bg, fontFamily: "'Outfit', 'Segoe UI', sans-serif" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+      <style>{`
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; }
+        @media (max-width: 768px) {
+          .sidebar { transform: translateX(-100%); }
+          .sidebar.open { transform: translateX(0); }
+          .main-content { margin-left: 0 !important; padding: 16px !important; }
+          .top-bar { flex-direction: column; gap: 12px; align-items: flex-start !important; }
+          .stat-grid { grid-template-columns: 1fr !important; }
+          .two-col-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .main-content { padding: 12px !important; }
+          h1 { font-size: 20px !important; }
+          .card-grid { grid-template-columns: 1fr !important; }
+        }
+        input:focus, select:focus, textarea:focus {
+          border-color: ${theme.accent} !important;
+          box-shadow: 0 0 0 3px ${theme.accent}20 !important;
+        }
+        button:active { transform: scale(0.98); }
+        ::selection { background: ${theme.accent}40; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: ${theme.border}; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${theme.textMuted}; }
+      `}</style>
+      <Sidebar
+        currentPage={currentPage} setCurrentPage={setCurrentPage}
+        user={currentUser} onLogout={() => setCurrentUser(null)}
+        collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed}
+      />
+      <div style={{
+        marginLeft: sidebarCollapsed ? "68px" : "240px",
+        transition: "margin-left 0.3s cubic-bezier(0.4,0,0.2,1)",
+        padding: "28px 32px",
+        minHeight: "100vh",
+      }}>
+        {/* Top Bar */}
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          marginBottom: "24px", padding: "12px 20px",
+          background: "white", borderRadius: "12px", border: `1px solid ${theme.border}`,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: theme.success }} />
+            <span style={{ fontSize: "13px", color: theme.textSecondary }}>
+              {currentUser.store === "all" ? "All Stores" : STORES.find(s => s.id === currentUser.store)?.name}
+            </span>
+            <SyncIndicator />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <span style={{ fontSize: "13px", color: theme.textMuted }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <UserAvatar user={currentUser} size={32} />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: theme.textPrimary }}>{currentUser.name}</span>
+            </div>
+          </div>
+        </div>
+
+        {renderPage()}
+      </div>
+    </div>
+  );
+}
