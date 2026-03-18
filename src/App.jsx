@@ -1288,10 +1288,19 @@ function InvoicesPage({ data, setData, user }) {
   const getVAT = (items, vat) => vat ? getSubtotal(items) * VAT_RATE : 0;
   const getTotal = (items, vat) => getSubtotal(items) + getVAT(items, vat);
 
+  const getNextInvoiceId = () => {
+    const maxNum = data.invoices.reduce((max, inv) => {
+      const num = parseInt(String(inv.id).replace("INV-", ""), 10);
+      return Number.isNaN(num) ? max : Math.max(max, num);
+    }, 0);
+    
+    return `INV-${String(maxNum + 1).padStart(3, "0")}`;
+  };
+
   const saveInvoice = () => {
     if (!form.client || form.items.length === 0) return;
     const inv = {
-      id: `INV-${String(data.invoices.length + 1).padStart(3, "0")}`,
+      id: getNextInvoiceId(),
       ...form,
       date: new Date().toISOString().split("T")[0],
       status: "draft",
