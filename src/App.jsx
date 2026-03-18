@@ -1298,14 +1298,22 @@ function InvoicesPage({ data, setData, user }) {
   };
 
   const saveInvoice = () => {
-    if (!form.client || form.items.length === 0) return;
+    const validItems = form.items.filter(it => it.productId && it.qty > 0);
+  
+    if (!form.client.trim() || validItems.length === 0) {
+      alert("Please enter a client name and at least one valid item.");
+      return;
+    }
+  
     const inv = {
       id: getNextInvoiceId(),
       ...form,
+      client: form.client.trim(),
       date: new Date().toISOString().split("T")[0],
       status: "draft",
-      items: form.items.filter(it => it.productId && it.qty > 0),
+      items: validItems,
     };
+  
     setData(prev => ({ ...prev, invoices: [...prev.invoices, inv] }));
     setShowModal(false);
   };
