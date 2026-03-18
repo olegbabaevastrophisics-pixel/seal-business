@@ -1305,6 +1305,19 @@ function InvoicesPage({ data, setData, user }) {
     setData(prev => ({ ...prev, invoices: prev.invoices.map(inv => inv.id === id ? { ...inv, status } : inv) }));
   };
 
+  const deleteInvoice = (id) => {
+    if (!confirm("Are you sure you want to delete this invoice?")) return;
+
+    setData(prev => ({
+      ...prev,
+      invoices: prev.invoices.filter(inv => inv.id !== id)
+    }));
+
+    if (viewInvoice?.id === id) {
+      setViewInvoice(null);
+    }
+  };
+  
   const statusColors = {
     draft: { bg: "#F0F0F5", color: theme.textMuted },
     pending: { bg: "#FEF9E7", color: "#D4A843" },
@@ -1377,6 +1390,15 @@ function InvoicesPage({ data, setData, user }) {
                         onMouseEnter={e => { e.currentTarget.style.background = "#F0F0F5"; e.currentTarget.style.color = theme.primary; }}
                         onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = theme.textMuted; }}
                         title="View"><Icons.Eye /></button>
+                      <button
+                        onClick={() => deleteInvoice(inv.id)}
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "#FDE8EA"; e.currentTarget.style.color = theme.danger; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = theme.textMuted; }}
+                        title="Delete"
+                      >
+                        <Icons.Trash />
+                      </button>
                       {inv.status === "draft" && (
                         <button onClick={() => updateStatus(inv.id, "pending")} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "6px", color: theme.textMuted }}
                           onMouseEnter={e => { e.currentTarget.style.background = "#FEF9E7"; e.currentTarget.style.color = "#D4A843"; }}
