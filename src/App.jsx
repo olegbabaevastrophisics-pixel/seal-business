@@ -1267,19 +1267,26 @@ function InventoryPage({ data, setData, user }) {
 function InvoicesPage({ data, setData, user }) {
   const [showModal, setShowModal] = useState(false);
   const [viewInvoice, setViewInvoice] = useState(null);
-  const [form, setForm] = useState({ client: "", items: [{ productId: "", qty: 1, price: 0 }], dueDate: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store });
+  const [form, setForm] = useState({ client: "", items: [{ productId: "", productSearch: "", qty: 1, price: 0 }], dueDate: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store });
 
   const storeFilter = user.store === "all" ? null : user.store;
   const invoices = data.invoices.filter(inv => !storeFilter || inv.store === storeFilter);
 
-  const addItem = () => setForm({ ...form, items: [...form.items, { productId: "", qty: 1, price: 0 }] });
+  const addItem = () =>
+    setForm({
+      ...form,
+      items: [...form.items, { productId: "", productSearch: "", qty: 1, price: 0 }]
+    });
   const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
   const updateItem = (idx, field, value) => {
     const items = [...form.items];
     items[idx] = { ...items[idx], [field]: value };
     if (field === "productId") {
       const prod = data.products.find(p => p.id === value);
-      if (prod) items[idx].price = prod.price;
+      if (prod) {
+        items[idx].price = prod.price;
+        items[idx].productSearch = prod.name;
+      }
     }
     setForm({ ...form, items });
   };
@@ -1349,7 +1356,7 @@ function InvoicesPage({ data, setData, user }) {
           <h1 style={{ fontSize: "24px", fontWeight: 700, color: theme.textPrimary, marginBottom: "4px" }}>Invoices</h1>
           <p style={{ fontSize: "14px", color: theme.textSecondary }}>{invoices.length} invoices · {invoices.filter(i => i.status === "pending").length} pending</p>
         </div>
-        <button onClick={() => { setForm({ client: "", items: [{ productId: "", qty: 1, price: 0 }], dueDate: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store }); setShowModal(true); }} style={btnAccent}>
+        <button onClick={() => { setForm({ client: "", items: [{ productId: "", productSearch: "", qty: 1, price: 0 }], dueDate: "", currency: "MUR", lang: "en", vat: true, store: user.store === "all" ? "black-river" : user.store }); setShowModal(true); }} style={btnAccent}>
           <Icons.Plus /> New Invoice
         </button>
       </div>
@@ -1479,10 +1486,59 @@ function InvoicesPage({ data, setData, user }) {
           </div>
           {form.items.map((item, idx) => (
             <div key={idx} style={{ display: "grid", gridTemplateColumns: "2fr 80px 120px 40px", gap: "8px", marginBottom: "8px", alignItems: "end" }}>
-              <select value={item.productId} onChange={e => updateItem(idx, "productId", e.target.value)} style={selectStyle}>
-                <option value="">Select product...</option>
-                {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={item.productSearch || ""}
+                  onChange={e => updateItem(idx, "productSearch", e.target.value)}
+                  placeholder="Search product..."
+                  style={inputStyle}
+                />
+              
+                {item.productSearch && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      right: 0,
+                      background: "white",
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: "8px",
+                      marginTop: "4px",
+                      maxHeight: "180px",
+                      overflowY: "auto",
+                      zIndex: 20,
+                      boxShadow: "0 8px 20px rgba(0,0,0,0.08)"
+                    }}
+                  >
+                    {data.products
+                      .filter(p =>
+                        p.name.toLowerCase().includes((item.productSearch || "").toLowerCase())
+                      )
+                      .slice(0, 8)
+                      .map(p => (
+                        <div
+                          key={p.id}
+                          onClick={() => updateItem(idx, "productId", p.id)}
+                          style={{
+                            padding: "10px 12px",
+                            cursor: "pointer",
+                            borderBottom: `1px solid ${theme.border}`,
+                            fontSize: "13px"
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = "#F8F9FD"}
+                          onMouseLeave={e => e.currentTarget.style.background = "white"}
+                        >
+                          <div style={{ fontWeight: 500, color: theme.textPrimary }}>{p.name}</div>
+                          <div style={{ fontSize: "12px", color: theme.textMuted }}>
+                            {formatCurrency(p.price)} · Stock: {p.qty}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
               <input type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={inputStyle} min="1" placeholder="Qty" />
               <input type="number" value={item.price} onChange={e => updateItem(idx, "price", Number(e.target.value))} style={inputStyle} placeholder="Price" />
               {form.items.length > 1 && (
